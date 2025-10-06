@@ -1,0 +1,58 @@
+// inicio de cada programa
+.global _start
+
+
+// declaraciones de variables
+.data
+a: .word 10
+b: .float 0.00
+flag: .byte true
+c: .byte 'x'
+s: .asciz "Hola Mundo"
+
+
+// constantes
+.section .rodata
+
+// código ejecutablse
+.text
+
+//main del programa
+_start:
+
+// registros, operaciones y entre otras cosas
+	mov x1, #10
+	mov x2, #5
+	cmp x1, x2
+	cset w0, GT
+	cmp w0, #0
+	beq else_if_0_0
+	mov x1, x0
+	mov x0, #1
+	mov x2, #3
+	mov x8, #64
+	svc #0
+	b end_if_0
+
+//etiquetas
+else_if_0_0:
+	mov x1, x0
+	mov x0, #1
+	mov x2, #3
+	mov x8, #64
+	svc #0
+
+
+end_if_0:
+	inicio_while_0:
+	ldr x1, =flag
+	ldr w0, [x1]
+	cmp w0, #0
+	beq end_while_0
+	b inicio_while_0
+	end_while_0:
+
+    //salida del programa por defecto
+	mov x0, #0
+	mov x8, #93
+	svc #0

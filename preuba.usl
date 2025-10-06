@@ -1,0 +1,155 @@
+// Código correcto
+int a = 10;
+float b = 2.5f;
+System.out.println(a);
+
+// Errores sintácticos
+int c = 15  // Falta ;
+xyz d = 20; // Tipo inválido
+System.out.println(a  )
+
+// Errores semánticos
+int a = 25; // Variable ya declarada
+z = 30;     // Variable no declarada
+System.out.println(w); // Variable no declarada
+
+a = 7;        // Error: no se graficará
+int b = 8;    // Correcto: SÍ se graficará
+int c = "h";  // Error de tipo: no se graficará
+float d = 2;  // Correcto: SÍ se graficará
+
+
+int a = 10;
+float b = 2.5f;
+System.out.println(a);
+a = 8;
+System.out.println(a);
+float d = 2;
+
+int n = 123;
+String s = String.valueOf(n);
+System.out.println(s);
+
+
+int x = 2;
+
+switch (x) {
+    case 1:
+        System.out.println("Caso 1");
+        break;
+    case 2:
+        System.out.println("Caso 2");
+        break;
+    default:
+        System.out.println("Caso por defecto");
+}
+
+int x = 0;
+while (x < 10) {
+    System.out.println(x);
+    if (x == 5) {
+        break;
+    }
+    x = x + 1;
+}
+
+for (int i = 0; i < 5; i++) {
+    System.out.println("Valor de i: " + i);
+}
+
+System.out.println("=== Prueba avanzada de precedencia ===");
+
+int x = 5;
+int y = 2;
+int z = 8;
+
+// combinación de suma, multiplicación y resta
+if (x + y * z - 3 > 15) {  // 5 + 16 - 3 = 18 > 15
+    System.out.println("x + y * z - 3 es mayor que 15");
+} else {
+    System.out.println("x + y * z - 3 no es mayor que 15");
+}
+
+
+
+System.out.println("=== Prueba avanzada de precedencia ===");
+// Operadores aritméticos
+System.out.println("Resultado 1: " + (5 + 3 * 2 - 8 / 4 % 2)); // Esperado: 10
+System.out.println("\n");
+System.out.println("Resultado 2: " + ((10 - 3) * (2 + 4) / 3)); // Esperado: 14
+System.out.println("\n");
+// Operadores relacionales y lógicos
+System.out.println("Resultado 3: " + (5 > 3 && 2 < 4 || 10 == 10)); // Esperado: true
+System.out.println("\n");
+System.out.println("Resultado 4: " + (!(5 > 3 && 2 < 4) || 10 != 10)); // Esperado: false
+System.out.println("\n");
+// Operadores bit a bit
+System.out.println("Resultado 5: " + ((5 & 3) | (2 ^ 1))); // Esperado: 7
+System.out.println("\n");
+System.out.println("Resultado 6: " + (8 << 2 + 1 >> 3)); // Esperado: 4
+System.out.println("\n");
+// Combinación de operadores
+System.out.println("Resultado 7: " + (5 + 3 * 2 - (8 / 4) % 2 << 1)); // Esperado: 16
+System.out.println("\n");
+System.out.println("Resultado 8: " + ((5 > 3 || 2 < 4) && !(10 == 10))); // Esperado: false
+System.out.println("\n");
+// Operadores de igualdad y relacionales
+System.out.println("Resultado 9: " + (5 == 5 && 10 != 3 || 7 >= 4 && 2 <= 8)); // Esperado: true
+System.out.println("\n");
+// Operadores unarios
+System.out.println("Resultado 10: " + (-5 + 3)); // Esperado: -2
+System.out.println("\n");
+System.out.println("Resultado 11: " + (!false && true)); // Esperado: true
+System.out.println("\n");
+
+
+System.out.println("=== Prueba avanzada de precedencia ===\n");
+
+int x = 5;
+int y = 2;
+int z = 8;
+
+System.out.println("restultado de: " + (x + y * z - 3) );
+
+int[] numeros = {2, 5, 7, 8, 11, 12};
+int clave = 7;
+int indice = Arrays.indexOf(numeros, clave);
+System.out.println(indice); 
+
+
+String[] frutas = {"manzana", "banana", "cereza"};
+String buscar = "banana";
+int pos = Arrays.indexOf(frutas, buscar);
+System.out.println(pos);
+
+
+int[] primes = { 2, 3, 5, 7, 11 };
+int x = primes[2];
+
+int[][] board = {
+{ 0, 1, 0 },
+{ 1, 0, 1 },
+{ 0, 1, 0 }
+};
+
+int y = board[1][2];
+
+int edad = Integer.parseInt("25");
+
+double pi = Double.parseDouble("3.1416");
+
+String s2 = String.valueOf(true);
+
+String s = String.join("-", "2025", "08", "03");
+
+
+int[] numeros = { 2, 5, 7, 8, 11, 12 };
+int clave = 7;
+int indice = Arrays.indexOf(numeros, clave);
+
+int[] numeros = { 2, 5, 7, 8, 11, 12 };
+int tam = numeros.length;
+
+int[] numeros = { 2, 5, 7, 8 };
+int nuevoVal = 11;
+int[] ampliado = numeros.add(nuevoVal);

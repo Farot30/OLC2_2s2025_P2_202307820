@@ -1,0 +1,26 @@
+#ifndef DECLARACIONES_ARM64_H
+#define DECLARACIONES_ARM64_H
+
+#include "../AST/ast.h"
+#include "registros_arm64.h"
+#include <stdio.h>
+
+// Estructura para manejar la generación de declaraciones
+typedef struct {
+    FILE* archivo;
+    char* buffer;
+    size_t buffer_size;
+    AdministradorRegistros* admin_registros;
+} GeneradorDeclaraciones;
+
+// Funciones para generar declaraciones ARM64
+void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archivo, 
+                                      char* buffer, size_t buffer_size,
+                                      AdministradorRegistros* admin);
+
+void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool* seccion_text_iniciada);
+void generarSeccionData(GeneradorDeclaraciones* gen);
+void agregarCodigoAlBuffer(GeneradorDeclaraciones* gen, const char* codigo);
+void generarCargaEnSeccionTexto(GeneradorDeclaraciones* gen, const char* nombreVariable, int registro, bool* seccion_text_iniciada);
+
+#endif
