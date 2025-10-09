@@ -287,9 +287,7 @@ declaracion:
         agregarHijo($$, crearNodo(AST_TIPO, $1));
         NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
         id->linea = @2.first_line; id->columna = @2.first_column;
-        NodoAST* def = crearNodo(AST_NUMERO, (char*)valorPorDefectoTipo(obtenerTipoDesdeString($1)));
         agregarHijo($$, id);
-        agregarHijo($$, def);
     }
     | TOKEN_FINAL tipo_primitivo TOKEN_IDENTIFICADOR TOKEN_IGUAL expresion {
         $$ = crearNodo(AST_DECLARACION_CONST, "declaracion_const");

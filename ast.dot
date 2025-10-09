@@ -1,16 +1,14 @@
 digraph AST {
   node [shape=record,fontname="Helvetica"];
-  n0x575972c00ff0 [label="{Tipo: PROGRAMA|Valor: Programa}"];
-  n0x575972c00ff0 -> n0x575972f06480;
-  n0x575972f06480 [label="{Tipo: METODO_MAIN|Valor: public static void main}"];
-  n0x575972f06480 -> n0x575972b42570;
-  n0x575972b42570 [label="{Tipo: BLOQUE|Valor: Bloque}"];
-  n0x575972b42570 -> n0x575972f14620;
-  n0x575972f14620 [label="{Tipo: DECLARACION_CONST|Valor: declaracion_const}"];
-  n0x575972f14620 -> n0x575972df07e0;
-  n0x575972df07e0 [label="{Tipo: TIPO|Valor: int}"];
-  n0x575972f14620 -> n0x575972deb6a0;
-  n0x575972deb6a0 [label="{Tipo: IDENT|Valor: s}"];
-  n0x575972f14620 -> n0x575972f121f0;
-  n0x575972f121f0 [label="{Tipo: NUMERO|Valor: 8}"];
+  n0x61815e106bd0 [label="{Tipo: PROGRAMA|Valor: Programa}"];
+  n0x61815e106bd0 -> n0x61815e12f7c0;
+  n0x61815e12f7c0 [label="{Tipo: METODO_MAIN|Valor: public static void main}"];
+  n0x61815e12f7c0 -> n0x61815dd872a0;
+  n0x61815dd872a0 [label="{Tipo: BLOQUE|Valor: Bloque}"];
+  n0x61815dd872a0 -> n0x61815dfed6b0;
+  n0x61815dfed6b0 [label="{Tipo: DECL|Valor: declaracion}"];
+  n0x61815dfed6b0 -> n0x61815dfeb190;
+  n0x61815dfeb190 [label="{Tipo: TIPO|Valor: int}"];
+  n0x61815dfed6b0 -> n0x61815dfebef0;
+  n0x61815dfebef0 [label="{Tipo: IDENT|Valor: l}"];
 }

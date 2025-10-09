@@ -56,3 +56,53 @@ end_if_0:
 	mov x0, #0
 	mov x8, #93
 	svc #0
+
+
+
+
+para sumas salida de ejemplo de 3 diferentes números enteros
+
+
+.data 
+
+.bss 
+a: .space 4
+
+.text 
+ .global _start 
+_start: 
+        mov     w1, #15
+        mov     w2, #16
+        add    w0, w1, w2
+        mov     w2, #17
+        add    w0, w0, w2
+        ldr x1, =a
+        str w0, [x1]
+        svc 0 
+        mov x0, 0 
+        mov x8, 93 
+        svc 0
+
+
+
+// declaración de variables
+.data 
+a: .word 1
+b: .double 15.800000
+
+.bss 
+
+.text 
+ .global _start 
+_start: 
+        mov x0, 0 
+        mov x8, 93 
+        svc 0
+
+
+para diferentes declaraciones de como se tiene que declarar cada cosas
+.byte
+.float
+.double
+.asciz
+.word

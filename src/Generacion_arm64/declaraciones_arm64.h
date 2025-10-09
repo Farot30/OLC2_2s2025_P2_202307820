@@ -18,9 +18,8 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
                                       char* buffer, size_t buffer_size,
                                       AdministradorRegistros* admin);
 
-void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool* seccion_text_iniciada);
+void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool* seccion_data_iniciada, bool* seccion_bss_iniciada);
 void generarSeccionData(GeneradorDeclaraciones* gen);
+void generarSeccionBss(GeneradorDeclaraciones* gen);
 void agregarCodigoAlBuffer(GeneradorDeclaraciones* gen, const char* codigo);
-void generarCargaEnSeccionTexto(GeneradorDeclaraciones* gen, const char* nombreVariable, int registro, bool* seccion_text_iniciada);
-
 #endif

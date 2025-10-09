@@ -12,6 +12,60 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
     gen->admin_registros = admin;
 }
 
+void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo) {
+    if (!gen->buffer || !codigo) return;
+
+    const char* data_marker = ".data\n";
+    char* pos = strstr(gen->buffer, data_marker);
+    if (pos) {
+        // Encontrar el final de la línea .data
+        pos += strlen(data_marker);
+        size_t offset = pos - gen->buffer;
+        size_t len_actual = strlen(gen->buffer);
+        size_t len_codigo = strlen(codigo);
+
+        // Redimensionar buffer si es necesario
+        if (len_actual + len_codigo + 1 >= gen->buffer_size) {
+            gen->buffer_size = len_actual + len_codigo + 1024;
+            gen->buffer = realloc(gen->buffer, gen->buffer_size);
+        }
+
+        // Mover el contenido después de .data para hacer espacio
+        memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
+        memcpy(gen->buffer + offset, codigo, len_codigo);
+    } else {
+        // Si no existe .data, agregar al final
+        agregarCodigoAlBuffer(gen, codigo);
+    }
+}
+
+void insertarEnSeccionBss(GeneradorDeclaraciones* gen, const char* codigo) {
+    if (!gen->buffer || !codigo) return;
+
+    const char* bss_marker = ".bss\n";
+    char* pos = strstr(gen->buffer, bss_marker);
+    if (pos) {
+        // Encontrar el final de la línea .bss
+        pos += strlen(bss_marker);
+        size_t offset = pos - gen->buffer;
+        size_t len_actual = strlen(gen->buffer);
+        size_t len_codigo = strlen(codigo);
+
+        // Redimensionar buffer si es necesario
+        if (len_actual + len_codigo + 1 >= gen->buffer_size) {
+            gen->buffer_size = len_actual + len_codigo + 1024;
+            gen->buffer = realloc(gen->buffer, gen->buffer_size);
+        }
+
+        // Mover el contenido después de .bss para hacer espacio
+        memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
+        memcpy(gen->buffer + offset, codigo, len_codigo);
+    } else {
+        // Si no existe .bss, agregar al final
+        agregarCodigoAlBuffer(gen, codigo);
+    }
+}
+
 void agregarCodigoAlBuffer(GeneradorDeclaraciones* gen, const char* codigo) {
     if (gen->buffer && codigo) {
         size_t len_actual = strlen(gen->buffer);
@@ -38,98 +92,98 @@ void generarSeccionData(GeneradorDeclaraciones* gen) {
     agregarCodigoAlBuffer(gen, seccion_data);
 }
 
-void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool* seccion_text_iniciada) {
-    if (!gen || !nodo || nodo->tipo != AST_DECLARACION || !seccion_text_iniciada) return;
+void generarSeccionBss(GeneradorDeclaraciones* gen) {
+    const char* seccion_bss = "\n// seccion bss\n.bss\n";
+    if (gen->archivo) {
+        fprintf(gen->archivo, "%s", seccion_bss);
+    }
+    agregarCodigoAlBuffer(gen, seccion_bss);
+}
 
-    // Extraer información de la declaración
-    if (nodo->num_hijos < 2) return;
+void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool* seccion_data_iniciada, bool* seccion_bss_iniciada) {
+    if (!gen || !nodo || nodo->tipo != AST_DECLARACION || !seccion_data_iniciada || !seccion_bss_iniciada) {
+        printf("[DEBUG] Nodo inválido o tipo incorrecto en generarDeclaracionVariable\n");
+        return;
+    }
 
-    NodoAST* tipoNodo = nodo->hijos[0];  // Tipo de la variable
-    NodoAST* idNodo = nodo->hijos[1];    // Identificador
-    NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL; // Valor inicial
+    if (nodo->num_hijos < 2) {
+        printf("[DEBUG] Nodo con menos de 2 hijos en generarDeclaracionVariable\n");
+        return;
+    }
 
-    if (!tipoNodo || !idNodo || idNodo->tipo != AST_IDENTIFICADOR) return;
+    NodoAST* tipoNodo = nodo->hijos[0];
+    NodoAST* idNodo = nodo->hijos[1];
+    NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL;
+
+    if (!tipoNodo || !idNodo || idNodo->tipo != AST_IDENTIFICADOR) {
+        printf("[DEBUG] Nodo tipo o identificador inválido en generarDeclaracionVariable\n");
+        return;
+    }
 
     const char* nombreVariable = idNodo->valor;
     const char* tipoVariable = tipoNodo->valor;
-
-    // Obtener el tipo de dato
     TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
 
-    // Buscar el símbolo en la tabla para obtener el valor
-    Simbolo* simbolo = buscarSimbolo(nombreVariable);
     char valorStr[64] = "0";
+    bool inicializado = false;
 
-    if (simbolo && simbolo->valor.inicializado) {
-        switch (simbolo->tipo) {
-            case TIPO_INT:
-                snprintf(valorStr, sizeof(valorStr), "%d", simbolo->valor.v.i);
-                break;
-            case TIPO_FLOAT:
-                snprintf(valorStr, sizeof(valorStr), "%.6f", simbolo->valor.v.f);
-                break;
-            case TIPO_DOUBLE:
-                snprintf(valorStr, sizeof(valorStr), "%.15lf", simbolo->valor.v.d);
-                break;
-            case TIPO_CHAR:
-                snprintf(valorStr, sizeof(valorStr), "%d", (int)simbolo->valor.v.c);
-                break;
-            case TIPO_BOOLEAN:
-                snprintf(valorStr, sizeof(valorStr), "%d", simbolo->valor.v.b ? 1 : 0);
-                break;
-            default:
-                strcpy(valorStr, "0");
-                break;
+    if (valorNodo && valorNodo->valor) {
+        inicializado = true;
+        if (tipo == TIPO_BOOLEAN) {
+            if (strcmp(valorNodo->valor, "true") == 0) {
+                strncpy(valorStr, "1", sizeof(valorStr));
+            } else if (strcmp(valorNodo->valor, "false") == 0) {
+                strncpy(valorStr, "0", sizeof(valorStr));
+            }
+        } else if (tipo == TIPO_STRING){
+            if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
+                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            } else {
+                snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
+            }
+        } else if (tipo == TIPO_CHAR) {
+            if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
+                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            } else if (strlen(valorNodo->valor) == 1) {
+                snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
+            } else {
+                printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
+                strncpy(valorStr, "'\\0'", sizeof(valorStr));
+            }
+        } else {
+            strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
         }
-    } else if (valorNodo && valorNodo->valor) {
-        strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
         valorStr[sizeof(valorStr) - 1] = '\0';
     }
 
-    // Asignar registro a la variable
-    int registro = asignarRegistroAVariable(gen->admin_registros, nombreVariable, tipo);
-
-    // Generar código ARM64 - Solo declaración en .data
     char codigo[512];
-
-    // Declarar la variable en la sección .data (sin comentarios extra)
-    snprintf(codigo, sizeof(codigo), 
-             "%s: .word %s\n", 
-             nombreVariable, valorStr);
-
-    if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
-    agregarCodigoAlBuffer(gen, codigo);
-
-    printf("[DEBUG ARM64] Variable '%s' declarada con valor %s en registro %s\n",
-           nombreVariable, valorStr, obtenerNombreRegistro(registro));
-}
-
-void generarCargaEnSeccionTexto(GeneradorDeclaraciones* gen, const char* nombreVariable, int registro, bool* seccion_text_iniciada) {
-    if (!gen || !nombreVariable || registro < 0 || !seccion_text_iniciada) return;
-
-    // Cambiar a la sección .text si no está activa
-    if (!(*seccion_text_iniciada)) {
-        const char* seccion_texto = "\n// código ejecutable\n.text\n\n_start:\n    // Punto de entrada del programa\n";
-        if (gen->archivo) {
-            fprintf(gen->archivo, "%s", seccion_texto);
-        }
-        agregarCodigoAlBuffer(gen, seccion_texto);
-        *seccion_text_iniciada = true;
+    const char* tipoDeclaracion = "word";
+    if (tipo == TIPO_DOUBLE) {
+        tipoDeclaracion = "double";
+    } else if (tipo == TIPO_FLOAT) {
+        tipoDeclaracion = "float";
+    } else if (tipo == TIPO_CHAR) {
+        tipoDeclaracion = "byte";
+    } else if (tipo == TIPO_BOOLEAN) {
+        tipoDeclaracion = "byte";
+    } else if (tipo == TIPO_STRING) {
+        tipoDeclaracion = "asciz";
     }
 
-    // Generar el código de carga (esto se agregará después del _start)
-    char codigo[256];
-    snprintf(codigo, sizeof(codigo), 
-             "    // Cargar %s en registro %s\n"
-             "    adr x1, %s\n"
-             "    ldr %s, [x1]\n", 
-             nombreVariable, 
-             obtenerNombreRegistro(registro),
-             nombreVariable,
-             obtenerNombreRegistro(registro));
-
-    if (gen->archivo) {
-        fprintf(gen->archivo, "%s", codigo);
+    if (inicializado) {
+        snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+        insertarEnSeccionData(gen, codigo);
+        if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
+    } else {
+        // Reserva espacio según tipo
+        size_t espacio = 4;
+        if (tipo == TIPO_DOUBLE) espacio = 8;
+        else if (tipo == TIPO_FLOAT) espacio = 4;
+        else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) espacio = 1;
+        else if (tipo == TIPO_STRING) espacio = 32; // Puedes ajustar el tamaño
+        
+        snprintf(codigo, sizeof(codigo), "%s: .space %zu\n", nombreVariable, espacio);
+        insertarEnSeccionBss(gen, codigo);
+        if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
     }
-    agregarCodigoAlBuffer(gen, codigo);
 }

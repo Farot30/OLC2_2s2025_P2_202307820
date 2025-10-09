@@ -59,6 +59,7 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
 
 void finalizarGeneradorARM64(GeneradorARM64* gen) {
     if (gen->archivo) {
+        
         // Generar sección .text
         const char* seccion_text = "\n// código ejecutable\n.text\n\n_start:\n    // Punto de entrada del programa\n";
         fprintf(gen->archivo, "%s", seccion_text);
@@ -103,52 +104,24 @@ void agregarCodigoCarga(const char* nombreVariable, int registro) {
     nuevo->siguiente = codigo_carga_head;
     codigo_carga_head = nuevo;
 }
+bool seccion_data_iniciada = false;
+bool seccion_bss_iniciada = false;
 
 void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
     if (!gen || !nodo) return;
 
     switch (nodo->tipo) {
         case AST_DECLARACION:
-            // Crear sección .data si no existe
-            if (!gen->seccion_data_creada) {
-                generarSeccionData(&gen->gen_declaraciones);
-                gen->seccion_data_creada = true;
-            }
+            // NO generar secciones aquí, solo la declaración
+            printf("[DEBUG] Nodo de declaración detectado\n");
+            
+            generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
 
-            generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &gen->seccion_text_iniciada);
-
-            // Agregar código de carga a la lista
-            if (nodo->num_hijos > 1) {
-                NodoAST* idNodo = nodo->hijos[1];
-                if (idNodo && idNodo->tipo == AST_IDENTIFICADOR) {
-                    const char* nombreVariable = idNodo->valor;
-                    int registro = buscarRegistroPorVariable(&gen->admin_registros, nombreVariable);
-                    if (registro >= 0) {
-                        agregarCodigoCarga(nombreVariable, registro);
-                    }
-                }
-            }
             break;
+            
         case AST_DECLARACION_CONST:
-
-            if (!gen->seccion_data_creada) {
-                generarSeccionRoData(&gen->gen_constantes);
-                gen->seccion_data_creada = true;
-            }
-
             generarDeclaracionConstante(&gen->gen_constantes, nodo, &gen->seccion_text_iniciada);
 
-            // Agregar código de carga a la lista
-            if (nodo->num_hijos > 1) {
-                NodoAST* idNodo = nodo->hijos[1];
-                if (idNodo && idNodo->tipo == AST_IDENTIFICADOR) {
-                    const char* nombreVariable = idNodo->valor;
-                    int registro = buscarRegistroPorVariable(&gen->admin_registros, nombreVariable);
-                    if (registro >= 0) {
-                        agregarCodigoCarga(nombreVariable, registro);
-                    }
-                }
-            }
             break;
 
         // Aquí se pueden agregar más casos para otros tipos de nodos
@@ -164,6 +137,12 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
 // Funciones compatibles con la interfaz anterior
 void iniciarArchivoARM64(const char* nombreArchivo) {
     inicializarGeneradorARM64(&generador_principal, nombreArchivo);
+    
+    // GENERAR SOLO .data AL INICIO (las declaraciones se escribirán aquí)
+    generarSeccionData(&generador_principal.gen_declaraciones);
+    generarSeccionBss(&generador_principal.gen_declaraciones);
+
+    generador_principal.seccion_data_creada = true;
     
     // Mantener compatibilidad con variables estáticas
     archivoSalida = generador_principal.archivo;

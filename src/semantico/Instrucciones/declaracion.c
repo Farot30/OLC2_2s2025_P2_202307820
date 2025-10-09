@@ -67,8 +67,8 @@ int verificarDeclaracion(NodoAST* nodo) {
     NodoAST* valor = (nodo->num_hijos > 2) ? nodo->hijos[2] : NULL;
     TipoDato tipoDeclarado = obtenerTipoDesdeString(tipoNodo->valor);
 
-    printf("[DEBUG] Declarando '%s': tipo declarado=%s\n",
-           identificador->valor, nombreTipo(tipoDeclarado));
+    //printf("[DEBUG] Declarando '%s': tipo declarado=%s\n",
+    //       identificador->valor, nombreTipo(tipoDeclarado));
 
     Simbolo* sims = buscarSimbolo(identificador->valor);
     if (sims) {
@@ -93,6 +93,30 @@ int verificarDeclaracion(NodoAST* nodo) {
     }
 
     Simbolo* sim = buscarSimbolo(identificador->valor);
+
+    if (valor && valor->valor) {
+        // Usar valor inicial
+        ValorSimbolo v = evaluarExpr(valor);
+        setValorSimbolo(sim, v.tipo, v);
+    } else {
+        // Usar valor por defecto solo en la tabla de símbolos
+        const char* def = valorPorDefectoTipo(tipoDeclarado);
+        ValorSimbolo v;
+        v.inicializado = 1;
+        v.tipo = tipoDeclarado;
+        
+        // Asignar según tipo...
+        if (tipoDeclarado == TIPO_INT) v.v.i = atoi(def);
+        else if (tipoDeclarado == TIPO_FLOAT) v.v.f = atof(def);
+        else if (tipoDeclarado == TIPO_DOUBLE) v.v.d = atof(def);
+        else if (tipoDeclarado == TIPO_BOOLEAN) v.v.b = (strcmp(def, "true") == 0) ? 1 : 0;
+        else if (tipoDeclarado == TIPO_CHAR) v.v.c = '\0';
+        else if (tipoDeclarado == TIPO_STRING) v.v.s = NULL;
+        
+        setValorSimbolo(sim, tipoDeclarado, v);
+        printf("[DEBUG] Variable '%s' inicializada con valor por defecto\n", identificador->valor);
+        return 1; // Terminar aquí para declaraciones sin inicializador
+    }
     
     if (sim && nodo->num_hijos > 1) {
         // Verificación para métodos de parseo
@@ -135,11 +159,11 @@ int verificarDeclaracion(NodoAST* nodo) {
                 
                 // Mostrar valor convertido según el tipo
                 if (tipoParse == TIPO_INT) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %d\n", identificador->valor, v.v.i);
+                   // printf("[DEBUG] Variable '%s' inicializada con valor %d\n", identificador->valor, v.v.i);
                 } else if (tipoParse == TIPO_FLOAT) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.f);
+                   // printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.f);
                 } else {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.d);
+                   // printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.d);
                 }
             } else {
                 printf("[ERROR] Error al evaluar %s para '%s'\n", nombreFuncion, identificador->valor);
@@ -237,9 +261,9 @@ int verificarDeclaracion(NodoAST* nodo) {
                     setValorSimbolo(sim, valorAcceso.tipo, valorAcceso); 
                     
                     // Mostrar el valor asignado para depuración
-                    printf("[DEBUG] Variable '%s' inicializada con valor de acceso a %s: ", 
-                        identificador->valor,
-                        simboloAcceso->clase == SIMBOLO_MATRIZ ? "matriz" : "vector");
+                    //printf("[DEBUG] Variable '%s' inicializada con valor de acceso a %s: ", 
+                      //  identificador->valor,
+                     //   simboloAcceso->clase == SIMBOLO_MATRIZ ? "matriz" : "vector");
                     
                     switch (sim->tipo) {
                         case TIPO_INT:
@@ -358,32 +382,32 @@ int verificarDeclaracion(NodoAST* nodo) {
                             return 0;
                         }
                     } else {
-                        printf("[DEBUG] Conversión implícita en asignación: de %s to %s\n", 
-                            nombreTipo(v.tipo), nombreTipo(sim->tipo));
+                       // printf("[DEBUG] Conversión implícita en asignación: de %s to %s\n", 
+                       //     nombreTipo(v.tipo), nombreTipo(sim->tipo));
                     }
                 }
-                printf("[DEBUG DECLARACION] Valor para asignar a '%s': tipo=%d, double=%lf, float=%f, int=%d\n",
-                    identificador->valor, v.tipo, v.v.d, v.v.f, v.v.i);
+                //printf("[DEBUG DECLARACION] Valor para asignar a '%s': tipo=%d, double=%lf, float=%f, int=%d\n",
+                  //  identificador->valor, v.tipo, v.v.d, v.v.f, v.v.i);
 
                 setValorSimbolo(sim, v.tipo, v);
                 
                 // Mostrar valor según el tipo
                 if (sim->tipo == TIPO_INT) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %d\n", identificador->valor, v.v.i);
+                    //printf("[DEBUG] Variable '%s' inicializada con valor %d\n", identificador->valor, v.v.i);
                 } else if (sim->tipo == TIPO_FLOAT) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.f);
+                    //printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.f);
                 } else if (sim->tipo == TIPO_DOUBLE) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.d);
+                    //printf("[DEBUG] Variable '%s' inicializada con valor %f\n", identificador->valor, v.v.d);
                 } else if (sim->tipo == TIPO_CHAR) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor '%c'\n", identificador->valor, v.v.c);
+                    //printf("[DEBUG] Variable '%s' inicializada con valor '%c'\n", identificador->valor, v.v.c);
                 } else if (sim->tipo == TIPO_BOOLEAN) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor %s\n", 
-                           identificador->valor, v.v.b ? "true" : "false");
+                   // printf("[DEBUG] Variable '%s' inicializada con valor %s\n", 
+                    //       identificador->valor, v.v.b ? "true" : "false");
                 } else if (sim->tipo == TIPO_STRING) {
-                    printf("[DEBUG] Variable '%s' inicializada con valor \"%s\"\n", 
-                           identificador->valor, v.v.s ? v.v.s : "(null)");
+                    //printf("[DEBUG] Variable '%s' inicializada con valor \"%s\"\n", 
+                    //       identificador->valor, v.v.s ? v.v.s : "(null)");
                 } else {
-                    printf("[DEBUG] Variable '%s' inicializada con valor (tipo desconocido)\n", identificador->valor);
+                   // printf("[DEBUG] Variable '%s' inicializada con valor (tipo desconocido)\n", identificador->valor);
                 }
             } else {
                 printf("[ERROR] Expresión no inicializada para '%s'\n", identificador->valor);
