@@ -128,12 +128,6 @@ void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, b
         valorStr[sizeof(valorStr) - 1] = '\0';
     }
 
-    if (!(*seccion_rodata_iniciada)) {
-        printf("[DEBUG] Generando sección .rodata\n");
-        generarSeccionRoData(gen);
-        *seccion_rodata_iniciada = true;
-    }
-
     char codigo[512];
     const char* tipoDeclaracion = "word"; // Valor por defecto
     if (tipo == TIPO_DOUBLE) {
@@ -153,38 +147,4 @@ void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, b
 
     insertarEnSeccionRoData(gen, codigo);
 
-    if (gen->archivo) {
-        fprintf(gen->archivo, "%s", codigo);
-    }
-
-}
-
-void generarCargaEnSeccionTextoConstantes(GeneradorConstantesARM64* gen, const char* nombreVariable, int registro, bool* seccion_text_iniciada) {
-    if (!gen || !nombreVariable || registro < 0 || !seccion_text_iniciada) return;
-
-    // Cambiar a la sección .text si no está activa
-    if (!(*seccion_text_iniciada)) {
-        const char* seccion_texto = "\n// código ejecutable\n.text\n\n_start:\n    // Punto de entrada del programa\n";
-        if (gen->archivo) {
-            fprintf(gen->archivo, "%s", seccion_texto);
-        }
-        agregarCodigoAlBufferConstantes(gen, seccion_texto);
-        *seccion_text_iniciada = true;
-    }
-
-    // Generar el código de carga
-    char codigo[256];
-    snprintf(codigo, sizeof(codigo),
-             "    // Cargar %s en registro %s\n"
-             "    adr x1, %s\n"
-             "    ldr %s, [x1]\n",
-             nombreVariable,
-             obtenerNombreRegistro(registro),
-             nombreVariable,
-             obtenerNombreRegistro(registro));
-
-    if (gen->archivo) {
-        fprintf(gen->archivo, "%s", codigo);
-    }
-    agregarCodigoAlBufferConstantes(gen, codigo);
 }

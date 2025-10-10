@@ -204,6 +204,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             
         case AST_DECLARACION:
             generarDeclaracionARM64(nodo);
+            
             printf("[DEBUG] Procesando declaración\n");
             
             // VERIFICACIÓN ESPECIAL PARA DECLARACIÓN DE 'mensaje'
@@ -228,10 +229,13 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return EJEC_OK;
             
         case AST_ASIGNACION: {
+            
             if (nodo->num_hijos < 2) {
                 printf("[ERROR] Asignación sin destino o valor\n");
                 return EJEC_OK;
             }
+            printf("[DEBUG] Procesando asignación\n");
+            generarAsignacionesARM64(nodo);
             
             NodoAST* destino = nodo->hijos[0];
             NodoAST* valorNodo = nodo->hijos[1];
@@ -626,10 +630,14 @@ void interpretarPrograma(NodoAST* raiz) {
 
     salirAmbito();
 
-    finalizarArchivoARM64();
-
     const char* codigoGenerado = obtenerCodigoGenerado();
-    printf("\n[DEBUG] Código ARM64 generado:\n%s\n", codigoGenerado);
+    if (codigoGenerado) {
+        printf("\n[DEBUG] Código ARM64 generado:\n%s\n", codigoGenerado);
+    } else {
+        printf("[ERROR] No se generó código ARM64\n");
+    }
+
+    finalizarArchivoARM64();
     
     //printf("\n[DEBUG] === INTERPRETACIÓN COMPLETADA ===\n");
     mostrarTablaSimbolos();

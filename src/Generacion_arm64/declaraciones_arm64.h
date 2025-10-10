@@ -22,4 +22,8 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
 void generarSeccionData(GeneradorDeclaraciones* gen);
 void generarSeccionBss(GeneradorDeclaraciones* gen);
 void agregarCodigoAlBuffer(GeneradorDeclaraciones* gen, const char* codigo);
+
+void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo);
+void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo);
+
 #endif

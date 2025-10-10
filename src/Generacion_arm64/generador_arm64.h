@@ -17,6 +17,8 @@ typedef struct {
     GeneradorConstantesARM64 gen_constantes;
     bool seccion_data_creada;
     bool seccion_text_iniciada;
+    bool seccion_bss_creada;
+    bool seccion_rodata_creada;
 } GeneradorARM64;
 
 // Funciones principales
@@ -24,6 +26,7 @@ void iniciarArchivoARM64(const char* nombreArchivo);
 void finalizarArchivoARM64();
 void generarDeclaracionARM64(NodoAST* nodo);
 void generarDeclaracionConstanteARM64(NodoAST* nodo);
+void generarAsignacionesARM64(NodoAST* nodo);
 const char* obtenerCodigoGenerado();
 
 // Funciones del generador mejorado

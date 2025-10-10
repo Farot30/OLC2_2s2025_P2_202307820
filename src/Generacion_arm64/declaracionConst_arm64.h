@@ -20,6 +20,7 @@ void inicializarGeneradorConstantes(GeneradorConstantesARM64* gen, FILE* archivo
 void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, bool* seccion_text_iniciada);
 void generarSeccionRoData(GeneradorConstantesARM64* gen);
 void agregarCodigoAlBufferConstantes(GeneradorConstantesARM64* gen, const char* codigo);
-void generarCargaEnSeccionTextoConstantes(GeneradorConstantesARM64* gen, const char* nombreConstante, int registro, bool* seccion_text_iniciada);
+void insertarEnSeccionRoData(GeneradorConstantesARM64* gen, const char* codigo);
+
 
 #endif

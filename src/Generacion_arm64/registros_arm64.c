@@ -21,6 +21,7 @@ void inicializarRegistros(AdministradorRegistros* admin) {
     admin->registros[30].ocupado = true;  // link register
     
     admin->contador_temp = 0;
+    admin->contador_constantes = 0;
 }
 
 int obtenerRegistroLibre(AdministradorRegistros* admin) {
