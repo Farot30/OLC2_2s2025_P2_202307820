@@ -40,6 +40,8 @@ typedef struct Simbolo {
     struct Simbolo* siguiente;
     int inicializado;   
     int longitud; 
+    int filas;
+    int columnas;
     NodoAST* nodo_bloque; 
     NodoAST* nodo_return;
     NodoAST* nodo_params;
@@ -83,5 +85,13 @@ void salirAmbitoForLoop(const char* nombreVariableIteracion);
 Simbolo* buscarSimboloConAmbito(const char* nombre);
 void validarSimbolo(Simbolo* simbolo, const char* operacion);
 Simbolo* buscarSimboloConDepuracion(const char* nombre);
+
+void crearReferencia(const char* nombreLocal, Simbolo* simboloOriginal);
+
+// Función para verificar si un tipo se pasa por referencia
+int esTipoPorReferencia(TipoDato tipo, TipoSimbolo clase);
+
+// Función para sincronizar referencia con original
+void sincronizarReferencia(const char* nombreLocal);
 
 #endif

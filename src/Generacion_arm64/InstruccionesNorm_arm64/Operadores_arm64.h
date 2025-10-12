@@ -1,10 +1,11 @@
 #ifndef OPERADORES_ARM64_H
 #define OPERADORES_ARM64_H
 
-#include "../AST/ast.h"
+#include "../../AST/ast.h"
 #include "declaraciones_arm64.h"
-#include "registros_arm64.h"
-#include "../semantico/tipos.h"
+#include "../registros_arm64.h"
+#include "../../semantico/tipos.h"
+#include "StringBuilder.h"
 #include <stdio.h>
 
 
@@ -12,6 +13,8 @@ void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombre
 
 // Función recursiva para sumas/restas/multis/divisiones de enteros
 void generarCodigoRecursivoOperacion(NodoAST* nodo, char* codigoOperacion, int* esPrimera);
+
+void generarConcatenacionStringBuilder(GeneradorDeclaraciones* gen, const char* nombreVar, NodoAST* operacionNodo);
 
 // Insertar constantes en .rodata
 void insertarConstanteDoubleRoData(GeneradorDeclaraciones* gen, const char* nombre, double valor);

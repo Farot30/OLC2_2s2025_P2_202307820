@@ -1,8 +1,8 @@
 #include "generador_arm64.h"
 #include "registros_arm64.h"
-#include "declaraciones_arm64.h"
-#include "declaracionConst_arm64.h"
-#include "Asignacion_arm64.h"
+#include "InstruccionesNorm_arm64/declaraciones_arm64.h"
+#include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
+#include "InstruccionesNorm_arm64/Asignacion_arm64.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,7 +54,8 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     // **CREAR TODA LA ESTRUCTURA AL INICIO CON .rodata**
     const char* estructura_completa = 
         "// Código ARM64 generado por JavaLang Compiler\n"
-        ".global _start\n\n"
+        ".global _start\n"
+        ".extern itoa\n\n"
         "\n// declaraciones de variables\n"
         ".data\n"
         "\n// constantes\n"
@@ -109,6 +110,20 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             generarAsignacionARM64(&generador_principal.gen_declaraciones, nodo);
             break;
 
+        case AST_ASIGNACION_COMPUESTA:
+            printf("[DEBUG] Nodo de asignación compuesta detectado arm64\n");
+            generarAsignacionCompuestaARM64(&generador_principal.gen_declaraciones, nodo);
+            break;
+
+        case AST_OPERACION:
+            printf("[DEBUG] Nodo de operación detectado en ARM64\n");
+            // Solo generar si es una operación independiente (no parte de una declaración/asignación)
+            // Esto generalmente no debería ocurrir, pero si sucede, procesamos los hijos
+            for (int i = 0; i < nodo->num_hijos; i++) {
+                procesarNodoAST_ARM64(gen, nodo->hijos[i]);
+            }
+            break;
+
         default:
             // Procesar hijos recursivamente
             for (int i = 0; i < nodo->num_hijos; i++) {
@@ -137,15 +152,7 @@ void finalizarArchivoARM64() {
     bufferTamanio = generador_principal.buffer_size;
 }
 
-void generarDeclaracionARM64(NodoAST* nodo) {
-    procesarNodoAST_ARM64(&generador_principal, nodo);
-}
-
-void generarDeclaracionConstanteARM64(NodoAST* nodo) {
-    procesarNodoAST_ARM64(&generador_principal, nodo);
-}
-
-void generarAsignacionesARM64(NodoAST* nodo) {
+void GeneradorCodigoARM64(NodoAST* nodo) {
     procesarNodoAST_ARM64(&generador_principal, nodo);
 }
 

@@ -12,6 +12,157 @@
 #include <limits.h>
 #include <math.h>
 
+// En src/semantico/Embebidas/EvaluadoresArrays.c - agregar estas funciones auxiliares
+
+static char* extraerSubarrayComoString(const char* arrayStr, int* indices, int numIndices) {
+    if (!arrayStr || numIndices <= 0) return NULL;
+    
+    char* arrayCopy = strdup(arrayStr);
+    char* posActual = arrayCopy;
+    
+    printf("[DEBUG extraerSubarray] Procesando: %s con %d índices\n", arrayStr, numIndices);
+    
+    // Para cada nivel de profundidad (dimensión)
+    for (int nivel = 0; nivel < numIndices; nivel++) {
+        int indiceActual = indices[nivel];
+        printf("[DEBUG extraerSubarray] Nivel %d, buscando índice %d\n", nivel, indiceActual);
+        
+        // Encontrar el corchete de apertura para este nivel
+        char* abreCorchete = strchr(posActual, '[');
+        if (!abreCorchete) {
+            printf("[ERROR extraerSubarray] No se encontró '[' en nivel %d\n", nivel);
+            free(arrayCopy);
+            return NULL;
+        }
+        
+        // Avanzar al contenido dentro del corchete
+        posActual = abreCorchete + 1;
+        
+        // Navegar hasta el índice correcto en este nivel
+        int elementoActual = 0;
+        int profundidadCorchetes = 0;
+        
+        while (elementoActual < indiceActual && *posActual) {
+            if (*posActual == '[') {
+                profundidadCorchetes++;
+            } else if (*posActual == ']') {
+                profundidadCorchetes--;
+            } else if (*posActual == ',' && profundidadCorchetes == 0) {
+                elementoActual++;
+            }
+            posActual++;
+        }
+        
+        // Verificar si encontramos suficientes elementos
+        if (elementoActual < indiceActual) {
+            printf("[ERROR extraerSubarray] Índice %d fuera de rango en nivel %d\n", indiceActual, nivel);
+            free(arrayCopy);
+            return NULL;
+        }
+    }
+    
+    // Ahora extraer el elemento/subarray completo
+    char* inicioSubarray = posActual;
+    char* finSubarray = inicioSubarray;
+    int profundidadCorchetes = 0;
+    
+    // Si empieza con '[', es un subarray
+    if (*inicioSubarray == '[') {
+        profundidadCorchetes = 1;
+        finSubarray++;
+        
+        while (*finSubarray && profundidadCorchetes > 0) {
+            if (*finSubarray == '[') {
+                profundidadCorchetes++;
+            } else if (*finSubarray == ']') {
+                profundidadCorchetes--;
+            }
+            finSubarray++;
+        }
+    } else {
+        // Es un elemento primitivo
+        while (*finSubarray && *finSubarray != ',' && *finSubarray != ']') {
+            finSubarray++;
+        }
+    }
+    
+    // Extraer el subarray
+    int longitud = finSubarray - inicioSubarray;
+    char* resultado = (char*)malloc(longitud + 1);
+    if (resultado) {
+        strncpy(resultado, inicioSubarray, longitud);
+        resultado[longitud] = '\0';
+        
+        // Limpiar espacios
+        char* trim = resultado;
+        while (isspace(*trim)) trim++;
+        if (trim != resultado) {
+            memmove(resultado, trim, strlen(trim) + 1);
+        }
+    }
+    
+    free(arrayCopy);
+    printf("[DEBUG extraerSubarray] Resultado: '%s'\n", resultado ? resultado : "(null)");
+    return resultado;
+}
+
+static int contarElementosEnSubarray(const char* subarrayStr) {
+    if (!subarrayStr || strlen(subarrayStr) == 0) return 0;
+    
+    // Si no empieza con '[', es un elemento primitivo
+    if (subarrayStr[0] != '[') return 1;
+    
+    // Es un array, contar elementos
+    char* str = strdup(subarrayStr);
+    
+    // Remover corchetes externos
+    if (str[0] == '[') {
+        memmove(str, str + 1, strlen(str));
+        int len = strlen(str);
+        if (len > 0 && str[len - 1] == ']') {
+            str[len - 1] = '\0';
+        }
+    }
+    
+    if (strlen(str) == 0) {
+        free(str);
+        return 0;
+    }
+    
+    // Contar elementos separados por comas al nivel 0
+    int count = 0;
+    int nivel = 0;
+    int enString = 0;
+    char* p = str;
+    int hayElemento = 0;
+    
+    while (*p) {
+        if (*p == '"' && (p == str || *(p-1) != '\\')) {
+            enString = !enString;
+        } else if (!enString) {
+            if (*p == '[') {
+                nivel++;
+                hayElemento = 1;
+            } else if (*p == ']') {
+                nivel--;
+            } else if (*p == ',' && nivel == 0) {
+                if (hayElemento) count++;
+                hayElemento = 0;
+            } else if (!isspace(*p)) {
+                hayElemento = 1;
+            }
+        }
+        p++;
+    }
+    
+    // Contar el último elemento si hay
+    if (hayElemento) count++;
+    
+    free(str);
+    
+    printf("[DEBUG contarElementos] String: '%s' -> %d elementos\n", subarrayStr, count);
+    return count;
+}
 
 ValorSimbolo evaluarIndexof(NodoAST* e) {
     ValorSimbolo r;
@@ -286,74 +437,308 @@ ValorSimbolo evaluarLength(NodoAST* e) {
 
     NodoAST* idNodo = e->hijos[0];
 
-    // Caso 1: Identificador directo (vector o matriz)
+    // ===== CASO 1: Identificador directo (vector, matriz o array) =====
     if (idNodo->tipo == AST_IDENTIFICADOR) {
         Simbolo* simbolo = buscarSimbolo(idNodo->valor);
         if (!simbolo) {
             printf("[ERROR] Variable '%s' no declarada\n", idNodo->valor);
             return r;
         }
-        if (simbolo->clase != SIMBOLO_VECTOR && simbolo->clase != SIMBOLO_MATRIZ && simbolo->clase != SIMBOLO_ARRAY_MULTIDIMENSIONAL) {
-            printf("[ERROR] Array.length solo se puede aplicar a arreglos\n");
+        
+        // --- SUBCASO 1A: VECTOR ---
+        if (simbolo->clase == SIMBOLO_VECTOR) {
+            // **PRIMERA PRIORIDAD: Usar la longitud del símbolo si está establecida**
+            if (simbolo->longitud > 0) {
+                r = makeNum(TIPO_INT, (double)simbolo->longitud);
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                printf("[DEBUG] Vector.length de '%s' usando símbolo.longitud = %d\n", 
+                    idNodo->valor, simbolo->longitud);
+                return r;
+            }
+            
+            // **SEGUNDA PRIORIDAD: Calcular desde el string del vector**
+            if (simbolo->valor.inicializado && simbolo->valor.v.s) {
+                char* vectorStr = strdup(simbolo->valor.v.s);
+                int len = 0;
+                
+                // Remover corchetes si los hay
+                if (vectorStr[0] == '[') {
+                    memmove(vectorStr, vectorStr + 1, strlen(vectorStr));
+                    int strLen = strlen(vectorStr);
+                    if (strLen > 0 && vectorStr[strLen - 1] == ']') {
+                        vectorStr[strLen - 1] = '\0';
+                    }
+                }
+                
+                // Contar elementos separados por comas
+                if (strlen(vectorStr) > 0) {
+                    len = 1; // Al menos un elemento si hay contenido
+                    for (char* p = vectorStr; *p; p++) {
+                        if (*p == ',') len++;
+                    }
+                }
+                
+                free(vectorStr);
+                
+                // **ACTUALIZAR la longitud del símbolo para uso futuro**
+                simbolo->longitud = len;
+                
+                r = makeNum(TIPO_INT, (double)len);
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                printf("[DEBUG] Vector.length de '%s' calculado = %d\n", 
+                    idNodo->valor, len);
+                return r;
+            }
+            
+            printf("[ERROR] Vector '%s' no está inicializado\n", idNodo->valor);
             return r;
         }
-        int dimensiones[10] = {0};
-        int numDimensiones = 0;
-        obtenerDimensionesArray(simbolo, dimensiones, &numDimensiones);
-        int len = dimensiones[0];
-        r = makeNum(TIPO_INT, (double)len);
-        r.tipo = TIPO_INT;
-        r.inicializado = 1;
-        printf("[DEBUG] Array.length de '%s' = %d\n", idNodo->valor, len);
-        return r;
+        
+        // --- SUBCASO 1B: MATRIZ ---
+        else if (simbolo->clase == SIMBOLO_MATRIZ) {
+            // **PRIORIDAD 1: Usar filas almacenadas en el símbolo**
+            if (simbolo->filas > 0) {
+                r = makeNum(TIPO_INT, (double)simbolo->filas);
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                printf("[DEBUG] Matriz.length de '%s' usando símbolo.filas = %d\n", 
+                    idNodo->valor, simbolo->filas);
+                return r;
+            }
+            
+            // **PRIORIDAD 2: Analizar desde el string de la matriz**
+            if (simbolo->valor.inicializado && simbolo->valor.v.s) {
+                int numFilas = 0;
+                int numColumnas = 0;
+                analizarDimensionesMatriz(simbolo->valor.v.s, &numFilas, &numColumnas);
+                
+                // **ACTUALIZAR dimensiones del símbolo**
+                simbolo->filas = numFilas;
+                simbolo->columnas = numColumnas;
+                
+                r = makeNum(TIPO_INT, (double)numFilas);
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                printf("[DEBUG] Matriz.length de '%s' calculado = %d filas\n", 
+                    idNodo->valor, numFilas);
+                return r;
+            }
+            
+            printf("[ERROR] Matriz '%s' no está inicializada\n", idNodo->valor);
+            return r;
+        }
+        
+        // --- SUBCASO 1C: ARRAY MULTIDIMENSIONAL ---
+        else if (simbolo->clase == SIMBOLO_ARRAY_MULTIDIMENSIONAL) {
+            // Obtener la primera dimensión (número de "bloques" principales)
+            if (simbolo->valor.inicializado && simbolo->valor.v.s) {
+                char* arrayStr = strdup(simbolo->valor.v.s);
+                int dimension1 = 0;
+                
+                // Contar corchetes de apertura en el primer nivel
+                int nivel = 0;
+                int contandoPrimerNivel = 1;
+                
+                for (char* p = arrayStr; *p; p++) {
+                    if (*p == '[') {
+                        nivel++;
+                        if (nivel == 2 && contandoPrimerNivel) {
+                            dimension1++;
+                        }
+                    } else if (*p == ']') {
+                        nivel--;
+                        if (nivel == 0) {
+                            contandoPrimerNivel = 0;
+                        }
+                    } else if (*p == ',' && nivel == 1) {
+                        // Ignorar comas en el primer nivel
+                    }
+                }
+                
+                free(arrayStr);
+                
+                r = makeNum(TIPO_INT, (double)dimension1);
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                printf("[DEBUG] Array[n].length de '%s' = %d\n", 
+                    idNodo->valor, dimension1);
+                return r;
+            }
+            
+            printf("[ERROR] Array '%s' no está inicializado\n", idNodo->valor);
+            return r;
+        }
+        
+        else {
+            printf("[ERROR] '.length' solo se puede aplicar a vectores, matrices o arrays\n");
+            return r;
+        }
     }
-
-    // Caso 2: Acceso a matriz/vector (ejemplo: matriz[exp].length)
+    
+    // ===== CASO 2: Acceso a subarray (ejemplo: matriz[0].length) =====
     else if (idNodo->tipo == AST_ACCESO) {
+        printf("[DEBUG] Evaluando .length sobre acceso\n");
+        
         // Obtener el identificador base
         if (idNodo->num_hijos < 2 || idNodo->hijos[0]->tipo != AST_IDENTIFICADOR) {
             printf("[ERROR] Acceso inválido para length\n");
             return r;
         }
+        
         NodoAST* idBase = idNodo->hijos[0];
         Simbolo* simbolo = buscarSimbolo(idBase->valor);
+        
         if (!simbolo) {
             printf("[ERROR] Variable '%s' no declarada\n", idBase->valor);
             return r;
         }
-        if (simbolo->clase != SIMBOLO_MATRIZ) {
-            printf("[ERROR] Array.length solo se puede aplicar a filas de matrices\n");
+        
+        printf("[DEBUG] Símbolo '%s' encontrado, clase=%d\n", 
+            idBase->valor, simbolo->clase);
+        
+        // --- SUBCASO 2A: Acceso a fila de MATRIZ (matriz[i].length) ---
+        if (simbolo->clase == SIMBOLO_MATRIZ) {
+            // Obtener las dimensiones del acceso
+            NodoAST* dims = idNodo->hijos[1];
+            if (!dims || dims->tipo != AST_DIMENSIONES || dims->num_hijos < 1) {
+                printf("[ERROR] Acceso sin dimensiones válidas\n");
+                return r;
+            }
+            
+            // Debe tener exactamente 1 dimensión para matriz[i].length
+            if (dims->num_hijos != 1) {
+                printf("[ERROR] .length sobre matriz requiere exactamente 1 índice (ej: matriz[0].length)\n");
+                return r;
+            }
+            
+            // Evaluar el índice de fila
+            NodoAST* dimNodo = dims->hijos[0];
+            if (!dimNodo || dimNodo->tipo != AST_1DIMENSION || dimNodo->num_hijos < 1) {
+                printf("[ERROR] Dimensión sin expresión\n");
+                return r;
+            }
+            
+            ValorSimbolo idx = evaluarExpr(dimNodo->hijos[0]);
+            if (!idx.inicializado) {
+                printf("[ERROR] Índice no inicializado en acceso para length\n");
+                return r;
+            }
+            
+            int fila = idx.v.i;
+            printf("[DEBUG] Índice de fila: %d\n", fila);
+            
+            // **PRIORIDAD 1: Usar columnas almacenadas en el símbolo**
+            if (simbolo->columnas > 0) {
+                // Verificar rango de fila
+                if (simbolo->filas > 0 && (fila < 0 || fila >= simbolo->filas)) {
+                    printf("[ERROR] Índice de fila fuera de rango: %d (rango: 0-%d)\n", 
+                        fila, simbolo->filas - 1);
+                    return r;
+                }
+                
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                r.v.i = simbolo->columnas;
+                printf("[DEBUG] Matriz[%d].length de '%s' usando símbolo.columnas = %d\n", 
+                    fila, idBase->valor, simbolo->columnas);
+                return r;
+            }
+            
+            // **PRIORIDAD 2: Analizar desde el string**
+            if (simbolo->valor.inicializado && simbolo->valor.v.s) {
+                int numFilas = 0;
+                int numColumnas = 0;
+                analizarDimensionesMatriz(simbolo->valor.v.s, &numFilas, &numColumnas);
+                
+                // Actualizar dimensiones del símbolo
+                simbolo->filas = numFilas;
+                simbolo->columnas = numColumnas;
+                
+                // Verificar rango
+                if (fila < 0 || fila >= numFilas) {
+                    printf("[ERROR] Índice de fila fuera de rango: %d (rango: 0-%d)\n", 
+                        fila, numFilas - 1);
+                    return r;
+                }
+                
+                r.tipo = TIPO_INT;
+                r.inicializado = 1;
+                r.v.i = numColumnas;
+                printf("[DEBUG] Matriz[%d].length de '%s' calculado = %d columnas\n", 
+                    fila, idBase->valor, numColumnas);
+                return r;
+            }
+            
+            printf("[ERROR] Matriz '%s' no está inicializada\n", idBase->valor);
             return r;
         }
-        // Obtener el índice de fila
-        NodoAST* dims = idNodo->hijos[1];
-        if (!dims || dims->num_hijos < 1 || dims->hijos[0]->num_hijos < 1) {
-            printf("[ERROR] Acceso sin dimensiones\n");
+
+        // --- SUBCASO 2B: Acceso a subarray de ARRAY MULTIDIMENSIONAL ---
+        else if (simbolo->clase == SIMBOLO_ARRAY_MULTIDIMENSIONAL) {
+            // Para arrays de 3+ dimensiones: array[i][j].length
+            NodoAST* dims = idNodo->hijos[1];
+            if (!dims || dims->tipo != AST_DIMENSIONES) {
+                printf("[ERROR] Acceso sin dimensiones válidas\n");
+                return r;
+            }
+            
+            int numIndices = dims->num_hijos;
+            printf("[DEBUG] Array[n] con %d índices solicitando .length\n", numIndices);
+            
+            // **NUEVA IMPLEMENTACIÓN: Manejar directamente el string del subarray**
+            if (!simbolo->valor.inicializado || !simbolo->valor.v.s) {
+                printf("[ERROR] Array '%s' no está inicializado\n", idBase->valor);
+                return r;
+            }
+            
+            // Evaluar cada índice
+            int indices[10]; // Máximo 10 dimensiones
+            for (int i = 0; i < numIndices && i < 10; i++) {
+                NodoAST* dimNodo = dims->hijos[i];
+                if (dimNodo->tipo != AST_1DIMENSION || dimNodo->num_hijos < 1) {
+                    printf("[ERROR] Formato inválido para dimensión %d\n", i+1);
+                    return r;
+                }
+                ValorSimbolo idxValor = evaluarExpr(dimNodo->hijos[0]);
+                if (!idxValor.inicializado || idxValor.tipo != TIPO_INT) {
+                    printf("[ERROR] Índice %d debe ser entero\n", i+1);
+                    return r;
+                }
+                indices[i] = idxValor.v.i;
+            }
+            
+            // **CORREGIR: Extraer directamente el subarray como string**
+            char* subarrayStr = extraerSubarrayComoString(simbolo->valor.v.s, indices, numIndices);
+            
+            if (!subarrayStr) {
+                printf("[ERROR] No se pudo extraer el subarray\n");
+                return r;
+            }
+            
+            printf("[DEBUG] Subarray extraído: '%s'\n", subarrayStr);
+            
+            // Contar elementos en el subarray
+            int len = contarElementosEnSubarray(subarrayStr);
+            
+            free(subarrayStr);
+            
+            r.tipo = TIPO_INT;
+            r.inicializado = 1;
+            r.v.i = len;
+            printf("[DEBUG] Array[...].length calculado = %d\n", len);
             return r;
         }
-        ValorSimbolo idx = evaluarExpr(dims->hijos[0]->hijos[0]);
-        if (!idx.inicializado) {
-            printf("[ERROR] Índice no inicializado en acceso para length\n");
+        
+        else {
+            printf("[ERROR] '.length' sobre acceso solo válido para matrices o arrays multidimensionales\n");
             return r;
         }
-        int fila = idx.v.i;
-        // Obtener dimensiones de la matriz
-        int numFilas = 0, numColumnas = 0;
-        analizarDimensionesMatriz(simbolo->valor.v.s, &numFilas, &numColumnas);
-        if (fila < 0 || fila >= numFilas) {
-            printf("[ERROR] Índice de fila fuera de rango en length: %d (rango: 0-%d)\n", fila, numFilas-1);
-            return r;
-        }
-        // Devolver el número de columnas de esa fila (todas las filas tienen igual cantidad en tu modelo)
-        r = makeNum(TIPO_INT, (double)numColumnas);
-        r.tipo = TIPO_INT;
-        r.inicializado = 1;
-        printf("[DEBUG] Array.length de '%s[%d]' = %d\n", idBase->valor, fila, numColumnas);
-        return r;
     }
 
     // Caso no soportado
-    printf("[ERROR] Array.length solo se puede aplicar a identificadores o accesos\n");
+    printf("[ERROR] '.length' solo se puede aplicar a identificadores o accesos válidos\n");
     return r;
 }
 

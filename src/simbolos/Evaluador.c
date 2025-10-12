@@ -498,16 +498,34 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
             return r;
         // En Evaluador.c, modificar el caso AST_IDENTIFICADOR:
         case AST_IDENTIFICADOR: {
-            // Intentar buscar como variable primero
+    // Intentar buscar como variable primero
             printf("[DEBUG evaluarExpr] Buscando identificador '%s'\n", e->valor);
-            Simbolo* s = buscarSimbolo(e->valor);
+            Simbolo* s = buscarSimboloConAmbito(e->valor);
             if (s) {
                 printf("[DEBUG evaluarExpr] Símbolo '%s' encontrado, inicializado=%d, tipo=%d\n", s->nombre, s->valor.inicializado, s->valor.tipo);
                 if (!s->valor.inicializado) {
                     printf("[EVALUADOR] Variable '%s' no inicializada\n", e->valor);
                     return r;
                 }
-                // Si quieres ver el valor string:
+                
+                // **CORRECCIÓN PARA MATRICES: Retornar tipo base, no tipo de almacenamiento**
+                if (s->clase == SIMBOLO_MATRIZ) {
+                    ValorSimbolo resultado = getValorSimbolo(s);
+                    
+                    // **CAMBIAR TIPO DE STRING A TIPO BASE DE LA MATRIZ**
+                    resultado.tipo = s->tipo;  // tipo base (int)
+                    
+                    printf("[DEBUG evaluarExpr] Matriz '%s' evaluada: tipo corregido de %d a %d\n", 
+                        s->nombre, TIPO_STRING, resultado.tipo);
+                    
+                    if (resultado.v.s) {
+                        printf("[DEBUG evaluarExpr] Contenido matriz: '%s'\n", resultado.v.s);
+                    }
+                    
+                    return resultado;
+                }
+                
+                // **CASO NORMAL PARA OTROS TIPOS**
                 if (s->valor.tipo == TIPO_STRING && s->valor.v.s) {
                     printf("[DEBUG evaluarExpr] Valor string: '%s'\n", s->valor.v.s);
                 }
@@ -641,6 +659,16 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
         case AST_ADD:
             return evaluarAdd(e);
         case AST_LLAMADA: {
+            // Verificar si es una función void antes de intentar evaluar
+            if (e->num_hijos >= 1 && e->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                Simbolo* funcionSimbolo = buscarSimbolo(e->hijos[0]->valor);
+                if (funcionSimbolo && funcionSimbolo->clase == SIMBOLO_FUNCION_VOID) {
+                    printf("[ERROR EVALUADOR] No se puede evaluar función void '%s' como expresión\n", e->hijos[0]->valor);
+                    ValorSimbolo error = {0};
+                    return error;
+                }
+            }
+            
             printf("[DEBUG EVALUADOR] Evaluando llamada a función como expresión\n");
             ValorSimbolo resultado = EvaluarLlamadaFuncion(e);
             if (resultado.inicializado) {
@@ -648,7 +676,9 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 return resultado;
             } else {
                 printf("[ERROR EVALUADOR] Función no retornó un valor inicializado\n");
-                return r;  // Valor no inicializado
+                ValorSimbolo r = {0}; 
+                r.tipo = TIPO_DESCONOCIDO;
+                return r;
             }
         }
         case AST_ACCESO: {

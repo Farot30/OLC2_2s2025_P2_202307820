@@ -1,8 +1,8 @@
 #ifndef DECLARACION_CONST_ARM64_H
 #define DECLARACION_CONST_ARM64_H
 
-#include "registros_arm64.h"
-#include "../AST/ast.h"
+#include "../registros_arm64.h"
+#include "../../AST/ast.h"
 #include <stdio.h>
 
 typedef struct {

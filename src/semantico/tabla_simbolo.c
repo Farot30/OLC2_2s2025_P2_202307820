@@ -99,26 +99,29 @@ Simbolo* buscarSimboloEnAmbito(const char* nombre, const char* ambito) {
 Simbolo* buscarSimboloConAmbito(const char* nombre) {
     if (!nombre) return NULL;
     
-    // Primero buscar en el ámbito actual
+    // Primero buscar en el ámbito actual (PRIORIDAD LOCAL)
     const char* ambitoActivo = ambitoActual();
     Simbolo* simboloLocal = buscarSimboloEnAmbito(nombre, ambitoActivo);
     if (simboloLocal) {
-        printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito actual '%s'\n", 
-               nombre, ambitoActivo);
+        printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito actual '%s' con valor %d\n", 
+               nombre, ambitoActivo, simboloLocal->valor.v.i);
         return simboloLocal;
     }
     
-    // Si no se encuentra localmente, buscar globalmente (comportamiento original)
-    Simbolo* simboloGlobal = buscarSimbolo(nombre);
-    if (simboloGlobal) {
-        printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito global '%s'\n", 
-               nombre, simboloGlobal->ambito);
-        return simboloGlobal;
+    // Buscar en ámbitos superiores (pila de ámbitos)
+    for (int i = topeAmbitos - 2; i >= 0; i--) {
+        Simbolo* simboloSuperior = buscarSimboloEnAmbito(nombre, pilaAmbitos[i]);
+        if (simboloSuperior) {
+            printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito superior '%s'\n", 
+                   nombre, pilaAmbitos[i]);
+            return simboloSuperior;
+        }
     }
     
     printf("[DEBUG buscarSimboloConAmbito] Símbolo '%s' no encontrado\n", nombre);
     return NULL;
 }
+
 bool existeSimboloEnAmbitoActual(const char* nombre) {
     return buscarSimboloEnAmbito(nombre, ambitoActual()) != NULL;
 }
@@ -176,18 +179,7 @@ void limpiarSimbolosDeAmbito(const char* ambito) {
         }
     }
 }
-void salirAmbitoConLimpieza(void) {
-    if (topeAmbitos > 0) {
-        const char* ambitoASalir = pilaAmbitos[topeAmbitos - 1];
-        printf("[DEBUG] Saliendo del ámbito: %s\n", ambitoASalir);
-        
-        // Limpiar símbolos de este ámbito
-        limpiarSimbolosDeAmbito(ambitoASalir);
-        
-        // Liberar nombre del ámbito y decrementar tope
-        free(pilaAmbitos[--topeAmbitos]);
-    }
-}
+
 
 static Simbolo* crearSimbolo(const char* nombre, TipoSimbolo clase, TipoDato tipo,
                              const char* ambito, int linea, int columna) {
@@ -438,18 +430,25 @@ static const char* nombreClase(TipoSimbolo c){
 
 void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
     if (!sim) {
-     //   printf("[DEBUG setValorSimbolo] Símbolo es NULL\n");
+        printf("[DEBUG setValorSimbolo] Símbolo es NULL\n");
         return;
     }
 
+
+    printf("[DEBUG setValorSimbolo] === INICIANDO ASIGNACIÓN ===\n");
+    printf("[DEBUG setValorSimbolo] Variable: %s, Ámbito: %s, Nuevo valor: ", sim->nombre, sim->ambito);
+    printf("[DEBUG setValorSimbolo] Variable: %s\n", sim->nombre);
+    printf("[DEBUG setValorSimbolo] Tipo símbolo: %d, Tipo valor: %d\n", sim->tipo, tipoValor);
+    printf("[DEBUG setValorSimbolo] Valor inicializado: %d\n", val.inicializado);
+
     if (sim->clase == SIMBOLO_VECTOR) {
-      //  printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN VECTOR '%s'! Tipo: %d->%d\n", 
-     //          sim->nombre, sim->tipo, tipoValor);
+        printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN VECTOR '%s'! Tipo: %d->%d\n", 
+               sim->nombre, sim->tipo, tipoValor);
     }
 
     if (sim->clase == SIMBOLO_MATRIZ) {
-    //    printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN MATRIZ '%s'! Tipo: %d->%d\n", 
-     //          sim->nombre, sim->tipo, tipoValor);
+        printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN MATRIZ '%s'! Tipo: %d->%d\n", 
+               sim->nombre, sim->tipo, tipoValor);
     }
 
     // Actualizar el ámbito de la asignación
@@ -458,7 +457,7 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
 
     // PRIMERO: Verificar widening casting (char -> int -> float -> double)
     if (esWidening(tipoValor, sim->tipo)) {
-      //  printf("[DEBUG setValorSimbolo] Aplicando widening casting de %d a %d\n", tipoValor, sim->tipo);
+        printf("[DEBUG setValorSimbolo] Aplicando widening casting de %d a %d\n", tipoValor, sim->tipo);
         double base = 0;
         switch (tipoValor) {
             case TIPO_CHAR:   base = (unsigned char)val.v.c; break;
@@ -467,68 +466,68 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
             case TIPO_DOUBLE: base = val.v.d; break;
             default: break;
         }
-      //  printf("[DEBUG setValorSimbolo] Valor base calculado: %lf\n", base);
+        printf("[DEBUG setValorSimbolo] Valor base calculado: %lf\n", base);
         
         // Asignar según el tipo del símbolo
         switch (sim->tipo) {
             case TIPO_DOUBLE: 
                 sim->valor.v.d = base; 
-       //         printf("[DEBUG setValorSimbolo] Double asignado: %lf\n", sim->valor.v.d);
+                printf("[DEBUG setValorSimbolo] Double asignado: %lf\n", sim->valor.v.d);
                 break;
             case TIPO_FLOAT:  
                 sim->valor.v.f = (float)base; 
-        //        printf("[DEBUG setValorSimbolo] Float asignado: %f\n", sim->valor.v.f);
+                printf("[DEBUG setValorSimbolo] Float asignado: %f\n", sim->valor.v.f);
                 break;
             case TIPO_INT:    
                 sim->valor.v.i = (int)base; 
-       //         printf("[DEBUG setValorSimbolo] Int asignado: %d\n", sim->valor.v.i);
+                printf("[DEBUG setValorSimbolo] Int asignado: %d\n", sim->valor.v.i);
                 break;
             case TIPO_CHAR:   
                 sim->valor.v.c = (char)base; 
-        //        printf("[DEBUG setValorSimbolo] Char asignado: %c\n", sim->valor.v.c);
+                printf("[DEBUG setValorSimbolo] Char asignado: %c\n", sim->valor.v.c);
                 break;
             default: break;
         }
         
         sim->valor.tipo = sim->tipo;
         sim->valor.inicializado = 1;
-       // printf("[DEBUG setValorSimbolo] Widening completado exitosamente\n");
+        printf("[DEBUG setValorSimbolo] Widening completado exitosamente\n");
         return;
     }
 
     // SEGUNDO: Asignación directa para tipos iguales
     if (sim->tipo == tipoValor) {
-      //  printf("[DEBUG setValorSimbolo] Asignación directa (tipos iguales)\n");
+        printf("[DEBUG setValorSimbolo] Asignación directa (tipos iguales)\n");
         
         // Asignar según el tipo específico
         switch (sim->tipo) {
             case TIPO_INT:
                 sim->valor.v.i = val.v.i;
-        //        printf("[DEBUG setValorSimbolo] Int directo: %d\n", sim->valor.v.i);
+                printf("[DEBUG setValorSimbolo] Int directo: %d\n", sim->valor.v.i);
                 break;
             case TIPO_FLOAT:
                 sim->valor.v.f = val.v.f;
-                //printf("[DEBUG setValorSimbolo] Float directo: %f\n", sim->valor.v.f);
+                printf("[DEBUG setValorSimbolo] Float directo: %f\n", sim->valor.v.f);
                 break;
             case TIPO_DOUBLE:
                 sim->valor.v.d = val.v.d;
-                //printf("[DEBUG setValorSimbolo] Double directo: %lf\n", sim->valor.v.d);
+                printf("[DEBUG setValorSimbolo] Double directo: %lf\n", sim->valor.v.d);
                 break;
             case TIPO_CHAR:
                 sim->valor.v.c = val.v.c;
-                //printf("[DEBUG setValorSimbolo] Char directo: %c\n", sim->valor.v.c);
+                printf("[DEBUG setValorSimbolo] Char directo: %c\n", sim->valor.v.c);
                 break;
             case TIPO_BOOLEAN:
                 sim->valor.v.b = val.v.b;
-                //printf("[DEBUG setValorSimbolo] Boolean directo: %s\n", val.v.b ? "true" : "false");
+                printf("[DEBUG setValorSimbolo] Boolean directo: %s\n", val.v.b ? "true" : "false");
                 break;
             case TIPO_STRING:
                 if (sim->valor.v.s) free(sim->valor.v.s);
                 sim->valor.v.s = val.v.s ? strdup(val.v.s) : NULL;
-                //printf("[DEBUG setValorSimbolo] String directo: %s\n", sim->valor.v.s ? sim->valor.v.s : "NULL");
+                printf("[DEBUG setValorSimbolo] String directo: %s\n", sim->valor.v.s ? sim->valor.v.s : "NULL");
                 break;
             default:
-                //printf("[ERROR setValorSimbolo] Tipo desconocido en asignación directa: %d\n", sim->tipo);
+                printf("[ERROR setValorSimbolo] Tipo desconocido en asignación directa: %d\n", sim->tipo);
                 return;
         }
         
@@ -539,11 +538,11 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
 
     // TERCERO: Narrowing casting manual (double -> float -> int -> char)
     if (esNarrowing(tipoValor, sim->tipo)) {
-        //printf("[DEBUG setValorSimbolo] Intentando narrowing casting\n");
+        printf("[DEBUG setValorSimbolo] Intentando narrowing casting\n");
         // Solo permitir si el valor proviene de un cast explícito
         if (!val.es_cast) {
-            //printf("[ERROR] Narrowing casting solo permitido con cast explícito: %s <- %s\n",
-            //       nombreTipoDato(sim->tipo), nombreTipoDato(tipoValor));
+            printf("[ERROR] Narrowing casting solo permitido con cast explícito: %s <- %s\n",
+                   nombreTipoDato(sim->tipo), nombreTipoDato(tipoValor));
             return;
         }
         double base = 0;
@@ -563,7 +562,7 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
         }
         sim->valor.tipo = sim->tipo;
         sim->valor.inicializado = 1;
-        //printf("[DEBUG setValorSimbolo] Narrowing realizado\n");
+        printf("[DEBUG setValorSimbolo] Narrowing realizado\n");
         return;
     }
 
@@ -616,10 +615,10 @@ ValorSimbolo getValorSimbolo(Simbolo* sim) {
         case TIPO_STRING:
             if (sim->valor.v.s) {
                 r.v.s = strdup(sim->valor.v.s); // Crear una copia
-                printf("[DEBUG] getValorSimbolo: '%s' string = '%s'\n", sim->nombre, r.v.s);
+                printf("[DEBUG] getValorSimbolo: '%s' String = '%s'\n", sim->nombre, r.v.s);
             } else {
                 r.v.s = NULL;
-                printf("[DEBUG] getValorSimbolo: '%s' string = NULL\n", sim->nombre);
+                printf("[DEBUG] getValorSimbolo: '%s' String = NULL\n", sim->nombre);
             }
             break;
         default:
@@ -781,3 +780,109 @@ void modificarClaseSimbolo(const char* nombre, TipoSimbolo nuevaClase) {
     }
 }
 
+
+typedef struct {
+    char nombreLocal[64];
+    char nombreOriginal[64];
+    char ambitoOriginal[64];
+} Referencia;
+
+static Referencia referencias[100];
+static int numReferencias = 0;
+
+int esTipoPorReferencia(TipoDato tipo, TipoSimbolo clase) {
+    // Por referencia: String y arreglos (vectores, matrices, arrays)
+    return (tipo == TIPO_STRING || 
+            clase == SIMBOLO_VECTOR || 
+            clase == SIMBOLO_MATRIZ || 
+            clase == SIMBOLO_ARRAY_MULTIDIMENSIONAL);
+}
+
+void crearReferencia(const char* nombreLocal, Simbolo* simboloOriginal) {
+    if (!nombreLocal || !simboloOriginal || numReferencias >= 100) return;
+    
+    // Registrar la referencia
+    strncpy(referencias[numReferencias].nombreLocal, nombreLocal, 63);
+    strncpy(referencias[numReferencias].nombreOriginal, simboloOriginal->nombre, 63);
+    strncpy(referencias[numReferencias].ambitoOriginal, simboloOriginal->ambito, 63);
+    numReferencias++;
+    
+    printf("[DEBUG REFERENCIA] Creada referencia: '%s' -> '%s' (ámbito: %s)\n", 
+           nombreLocal, simboloOriginal->nombre, simboloOriginal->ambito);
+}
+
+void sincronizarReferencia(const char* nombreLocal) {
+    if (!nombreLocal) return;
+    
+    // Buscar la referencia
+    for (int i = 0; i < numReferencias; i++) {
+        if (strcmp(referencias[i].nombreLocal, nombreLocal) == 0) {
+            // Encontrar símbolos local y original
+            Simbolo* simboloLocal = buscarSimboloEnAmbito(nombreLocal, ambitoActual());
+            Simbolo* simboloOriginal = buscarSimboloEnAmbito(referencias[i].nombreOriginal, 
+                                                           referencias[i].ambitoOriginal);
+            
+            if (simboloLocal && simboloOriginal) {
+                // Sincronizar valor del local al original
+                if (simboloOriginal->valor.inicializado && simboloOriginal->valor.tipo == TIPO_STRING && simboloOriginal->valor.v.s) {
+                    free(simboloOriginal->valor.v.s);
+                }
+                
+                simboloOriginal->valor = simboloLocal->valor;
+                
+                // Para strings, duplicar el puntero
+                if (simboloLocal->valor.tipo == TIPO_STRING && simboloLocal->valor.v.s) {
+                    simboloOriginal->valor.v.s = strdup(simboloLocal->valor.v.s);
+                }
+                
+                printf("[DEBUG REFERENCIA] Sincronizada referencia '%s' -> '%s'\n", 
+                       nombreLocal, referencias[i].nombreOriginal);
+            }
+            break;
+        }
+    }
+}
+
+void limpiarReferenciasDeAmbito(const char* ambito) {
+    if (!ambito) return;
+    
+    // Sincronizar todas las referencias de este ámbito antes de limpiar
+    for (int i = 0; i < numReferencias; i++) {
+        Simbolo* simboloLocal = buscarSimboloEnAmbito(referencias[i].nombreLocal, ambito);
+        if (simboloLocal) {
+            sincronizarReferencia(referencias[i].nombreLocal);
+        }
+    }
+    
+    // Remover referencias del ámbito
+    int j = 0;
+    for (int i = 0; i < numReferencias; i++) {
+        Simbolo* simboloLocal = buscarSimboloEnAmbito(referencias[i].nombreLocal, ambito);
+        if (!simboloLocal) {
+            // Esta referencia no es de este ámbito, mantenerla
+            referencias[j] = referencias[i];
+            j++;
+        } else {
+            printf("[DEBUG REFERENCIA] Removida referencia '%s' del ámbito '%s'\n", 
+                   referencias[i].nombreLocal, ambito);
+        }
+    }
+    numReferencias = j;
+}
+
+
+void salirAmbitoConLimpieza(void) {
+    if (topeAmbitos > 0) {
+        const char* ambitoASalir = pilaAmbitos[topeAmbitos - 1];
+        printf("[DEBUG] Saliendo del ámbito: %s\n", ambitoASalir);
+        
+        // Limpiar referencias antes de limpiar símbolos
+        limpiarReferenciasDeAmbito(ambitoASalir);
+        
+        // Limpiar símbolos de este ámbito
+        limpiarSimbolosDeAmbito(ambitoASalir);
+        
+        // Liberar nombre del ámbito y decrementar tope
+        free(pilaAmbitos[--topeAmbitos]);
+    }
+}

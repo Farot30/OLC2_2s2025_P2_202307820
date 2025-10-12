@@ -1,8 +1,8 @@
 #ifndef DECLARACIONES_ARM64_H
 #define DECLARACIONES_ARM64_H
 
-#include "../AST/ast.h"
-#include "registros_arm64.h"
+#include "../../AST/ast.h"
+#include "../registros_arm64.h"
 #include <stdio.h>
 
 // Estructura para manejar la generación de declaraciones

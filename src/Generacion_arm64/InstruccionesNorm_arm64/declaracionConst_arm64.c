@@ -1,5 +1,5 @@
 #include "declaracionConst_arm64.h"
-#include "../semantico/tabla_simbolo.h"
+#include "../../semantico/tabla_simbolo.h"
 #include <string.h>
 #include <stdlib.h>
 

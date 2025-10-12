@@ -3,8 +3,8 @@
 
 #include "../AST/ast.h"
 #include "registros_arm64.h"
-#include "declaraciones_arm64.h"
-#include "declaracionConst_arm64.h"
+#include "InstruccionesNorm_arm64/declaraciones_arm64.h"
+#include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
 #include <stdio.h>
 
 // Estructura principal del generador ARM64
@@ -24,9 +24,7 @@ typedef struct {
 // Funciones principales
 void iniciarArchivoARM64(const char* nombreArchivo);
 void finalizarArchivoARM64();
-void generarDeclaracionARM64(NodoAST* nodo);
-void generarDeclaracionConstanteARM64(NodoAST* nodo);
-void generarAsignacionesARM64(NodoAST* nodo);
+void GeneradorCodigoARM64(NodoAST* nodo);
 const char* obtenerCodigoGenerado();
 
 // Funciones del generador mejorado

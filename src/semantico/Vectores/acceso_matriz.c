@@ -11,47 +11,43 @@
 #include <ctype.h>
 
 // Función para analizar las dimensiones de una matriz
-void analizarDimensionesMatriz(const char* matrixStr, int* numFilas, int* numColumnas) {
-    char* matrixCopy = strdup(matrixStr);
-    if (!matrixCopy) return;
+void analizarDimensionesMatriz(const char* matrizStr, int* numFilas, int* numColumnas) {
+    if (!matrizStr || !numFilas || !numColumnas) return;
     
-    // Contar filas (corchetes internos)
     *numFilas = 0;
     *numColumnas = 0;
-    char* p = matrixCopy;
     
-    // Contar filas (separadas por ],[)
+    // Contar corchetes de apertura para filas
+    const char* ptr = matrizStr;
     int nivel = 0;
-    while (*p) {
-        if (*p == '[') {
+    int dentroFila = 0;
+    int elementosEnFila = 0;
+    
+    while (*ptr) {
+        if (*ptr == '[') {
             nivel++;
-            if (nivel == 2) (*numFilas)++; // Solo contar apertura de segundo nivel
-        }
-        else if (*p == ']') nivel--;
-        p++;
-    }
-    
-    // Si no se encontraron filas, posiblemente sea una matriz vacía o mal formateada
-    if (*numFilas == 0) *numFilas = 1;
-    
-    // Contar columnas en la primera fila
-    if (*numFilas > 0) {
-        p = strchr(matrixCopy, '[');
-        if (p) {
-            p++; // Saltar el primer corchete
-            char* endRow = strchr(p, ']');
-            if (endRow) {
-                // Contar comas dentro de la primera fila + 1
-                *numColumnas = 1; // Al menos un elemento
-                while (p < endRow) {
-                    if (*p == ',') (*numColumnas)++;
-                    p++;
-                }
+            if (nivel == 2) {
+                (*numFilas)++;
+                dentroFila = 1;
+                elementosEnFila = 0;
             }
+        } else if (*ptr == ']') {
+            if (nivel == 2 && dentroFila) {
+                if (*numColumnas == 0) {
+                    *numColumnas = elementosEnFila;
+                }
+                dentroFila = 0;
+            }
+            nivel--;
+        } else if (*ptr == ',' && nivel == 2 && dentroFila) {
+            elementosEnFila++;
+        } else if (nivel == 2 && dentroFila && *ptr != ' ') {
+            if (elementosEnFila == 0) elementosEnFila = 1;
         }
+        ptr++;
     }
     
-    free(matrixCopy);
+    printf("[DEBUG] Dimensiones analizadas: %dx%d\n", *numFilas, *numColumnas);
 }
 
 // Función para validar la estructura básica del nodo de acceso a matriz

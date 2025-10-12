@@ -57,8 +57,9 @@ ResultadoEjecucion ejecutarSetenciaWhile(NodoAST* nodo) {
     entrarAmbito("while");
     contexto_break++;
     contexto_continue++;
-    while(1) {
-        
+    
+    while (1) {
+        // Evaluar la condición
         /*iteracion++;
         printf("iteracion no:%d\n", iteracion);*/
         /*
@@ -67,18 +68,10 @@ ResultadoEjecucion ejecutarSetenciaWhile(NodoAST* nodo) {
             addError("Límite máximo de iteraciones alcanzado, posible bucle infinito", ambitoActual(), nodo->linea, nodo->columna);
             break;
         }*/
-        // CRÍTICO: Evaluar la condición FRESCA cada vez
         ValorSimbolo vCond = evaluarExpr(condicion);
 
-        // Debug mejorado para ver qué tipo de condición tenemos
         printf("[DEBUG WHILE] Condición evaluada - inicializado: %d, tipo: %d\n", 
-            vCond.inicializado, vCond.tipo);
-            
-        if (vCond.tipo == TIPO_BOOLEAN) {
-            printf("[DEBUG WHILE] Valor booleano: %s\n", vCond.v.b ? "true" : "false");
-        } else if (vCond.tipo == TIPO_INT) {
-            printf("[DEBUG WHILE] Valor entero: %d\n", vCond.v.i);
-        }
+               vCond.inicializado, vCond.tipo);
 
         if (!vCond.inicializado) {
             printf("[ERROR WHILE] Condición del WHILE no está inicializada\n");
@@ -88,36 +81,28 @@ ResultadoEjecucion ejecutarSetenciaWhile(NodoAST* nodo) {
 
         // Convertir la condición a booleano
         int condicionVerdadera = convertirABooleano(vCond);
-        
         printf("[DEBUG WHILE] Condición convertida a boolean: %s\n", 
                condicionVerdadera ? "true" : "false");
 
-        if (condicionVerdadera) {
-            printf("[DEBUG WHILE] Ejecutando bloque del while\n");
-            
-            // Ejecutar el bloque
-            ResultadoEjecucion res = ejecutarNodoAST(bloque);
-            if (res == EJEC_BREAK) {
-                printf("[DEBUG WHILE] Break detectado, saliendo del bucle\n");
-                contexto_break--; // Decrementa el contexto antes de salir
-                salirAmbito();
-                return EJEC_OK;
-            }
 
-            if (res == EJEC_CONTINUE) {
-                printf("[DEBUG WHILE] Continue detectado, continuando al siguiente ciclo\n");
-                contexto_continue--; // Decrementa el contexto antes de continuar
-                salirAmbito();
-                continue;
-            }
-        
-        
-        
-        } else {
-            printf("[DEBUG WHILE] Condición falsa, saliendo del bucle\n");
+        if (!condicionVerdadera) {
+            printf("[DEBUG WHILE] Condición falsa, ejecutando una vez más\n");
             break;
         }
-        
+
+        // Ejecutar el bloque
+        printf("[DEBUG WHILE] Ejecutando bloque del while\n");
+        ResultadoEjecucion res = ejecutarNodoAST(bloque);
+
+        if (res == EJEC_BREAK) {
+            printf("[DEBUG WHILE] Break detectado, saliendo del bucle\n");
+            break;
+        }
+
+        if (res == EJEC_CONTINUE) {
+            printf("[DEBUG WHILE] Continue detectado, continuando al siguiente ciclo\n");
+            continue;
+        }
     }
     salirAmbito();
     contexto_break--;

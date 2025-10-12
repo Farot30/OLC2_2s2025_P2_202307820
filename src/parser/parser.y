@@ -82,7 +82,7 @@
 %type <nodo> instruccion_while instruccion_break instruccion_continue
 %type <nodo> instruccion_for lista_expresiones_join
 %type <nodo> Funcion_void Llamadas lista_parametros Funcion_parametros parametros instruccion_return
-%type <str> tipo_primitivo
+%type <str> tipo_primitivo TipoConCorchetes
 
 /* ========== PRECEDENCIA CORREGIDA ========== */
 %right TOKEN_IGUAL TOKEN_MAS_IGUAL TOKEN_MENOS_IGUAL TOKEN_POR_IGUAL TOKEN_DIV_IGUAL TOKEN_MOD_IGUAL 
@@ -448,6 +448,24 @@ declaracion_matriz:
         agregarHijo(lista, $9);
         agregarHijo($$, lista);
     }
+    | tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_IDENTIFICADOR TOKEN_IGUAL Llamadas {
+        // ✓ NUEVA REGLA: Declaración de matriz con resultado de función
+        $$ = crearNodo(AST_DECLARACION_MATRIZ, "Declaración Matriz");
+        $$->linea = @6.first_line; $$->columna = @6.first_column;
+        
+        // Tipo declarado
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+        
+        // Identificador
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $6);
+        id->linea = @6.first_line; id->columna = @6.first_column;
+        agregarHijo($$, id);
+        
+        // Llamada a función (resultado de la función)
+        agregarHijo($$, $8);
+    }
 ;
 
 declaracion_array_multidimensional:
@@ -631,6 +649,7 @@ acceso_escritura:
 ;
 
 /* ===============Funciones=======================*/
+// En parser.y, modificar la regla Funcion_void:
 Funcion_void:
     TOKEN_VOID TOKEN_IDENTIFICADOR TOKEN_PARIZQ TOKEN_PARDER bloque {
         $$ = crearNodo(AST_FUNCION_VOID, "Función void");
@@ -640,8 +659,34 @@ Funcion_void:
         id->linea = @2.first_line; id->columna = @2.first_column;
         agregarHijo($$, id);
 
+        // Lista de parámetros vacía
+        agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
         agregarHijo($$, $5);
+    }
+    | TOKEN_VOID TOKEN_IDENTIFICADOR TOKEN_PARIZQ parametros TOKEN_PARDER bloque {
+        $$ = crearNodo(AST_FUNCION_VOID, "Función void con parámetros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
 
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+
+        // Lista de parámetros
+        agregarHijo($$, $4);
+        agregarHijo($$, $6);
+    }
+    | TOKEN_VOID TOKEN_IDENTIFICADOR TOKEN_PARIZQ error TOKEN_PARDER bloque {
+        addErrorSintactico("Lista de parámetros inválida en función void", "global", @4.first_line, @4.first_column);
+        $$ = crearNodo(AST_FUNCION_VOID, "Función void");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+        
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+        
+        // Crear una lista de parámetros vacía
+        agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
+        agregarHijo($$, $6);
     }
 ;
 
@@ -709,6 +754,42 @@ Funcion_parametros:
         agregarHijo($$, $4);
         agregarHijo($$, $7);
     }
+    | TipoConCorchetes TOKEN_IDENTIFICADOR TOKEN_PARIZQ parametros TOKEN_PARDER TOKEN_LLAVEIZQ lista_sentencias TOKEN_LLAVEDER {
+        $$ = crearNodo(AST_FUNCION, "Función con parametros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+
+        // ✓ $1 es char* desde TipoConCorchetes
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+
+        agregarHijo($$, $4);
+        agregarHijo($$, $7);
+        
+        free($1);  // Liberar la memoria del string
+    }
+    | tipo_primitivo TOKEN_IDENTIFICADOR TOKEN_PARIZQ parametros TOKEN_PARDER error {
+        addErrorSintactico("Error en el cuerpo de la función", "global", @6.first_line, @6.first_column);
+        $$ = crearNodo(AST_FUNCION, "Función con parametros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+        
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+        
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+        
+        agregarHijo($$, $4);
+        // Crear un cuerpo vacío
+        NodoAST* bloqueVacio = crearNodo(AST_LISTA, "Programa");
+        agregarHijo($$, bloqueVacio);
+    }
     | tipo_primitivo TOKEN_IDENTIFICADOR TOKEN_PARIZQ error TOKEN_PARDER TOKEN_LLAVEIZQ lista_sentencias TOKEN_LLAVEDER {
         addErrorSintactico("Lista de parámetros inválida en definición de función", "global", @4.first_line, @4.first_column);
         $$ = crearNodo(AST_FUNCION, "Función con parametros");
@@ -725,6 +806,61 @@ Funcion_parametros:
         // Crear una lista de parámetros vacía
         agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
         agregarHijo($$, $7);
+    }
+    | TipoConCorchetes TOKEN_IDENTIFICADOR TOKEN_PARIZQ error TOKEN_PARDER TOKEN_LLAVEIZQ lista_sentencias TOKEN_LLAVEDER {
+        addErrorSintactico("Lista de parámetros inválida en definición de función", "global", @4.first_line, @4.first_column);
+        $$ = crearNodo(AST_FUNCION, "Función con parametros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+        
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+        
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+        
+        // Crear una lista de parámetros vacía
+        agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
+        agregarHijo($$, $7);
+        
+        free($1);
+    }
+    | tipo_primitivo TOKEN_IDENTIFICADOR TOKEN_PARIZQ TOKEN_PARDER TOKEN_LLAVEIZQ lista_sentencias TOKEN_LLAVEDER {
+        // ✓ NUEVO: Función sin parámetros con tipo primitivo
+        $$ = crearNodo(AST_FUNCION, "Función sin parametros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+
+        // Lista de parámetros vacía
+        agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
+        agregarHijo($$, $6);
+    }
+    | TipoConCorchetes TOKEN_IDENTIFICADOR TOKEN_PARIZQ TOKEN_PARDER TOKEN_LLAVEIZQ lista_sentencias TOKEN_LLAVEDER {
+        // ✓ NUEVO: Función sin parámetros con tipo matriz/vector
+        $$ = crearNodo(AST_FUNCION, "Función sin parametros");
+        $$->linea = @1.first_line; $$->columna = @1.first_column;
+
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo($$, tipo);
+
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo($$, id);
+
+        // Lista de parámetros vacía
+        agregarHijo($$, crearNodo(AST_PARAMETROS, "parametros"));
+        agregarHijo($$, $6);
+        
+        free($1);
     }
 ;
 parametros:
@@ -760,6 +896,59 @@ parametros:
             $$ = $1;
         }
     }
+    | parametros TOKEN_COMA TipoConCorchetes TOKEN_IDENTIFICADOR {
+        if($1->tipo != AST_PARAMETROS) {
+            NodoAST* lista = crearNodo(AST_PARAMETROS, "parametros");
+            agregarHijo(lista, $1);
+            
+            NodoAST* param = crearNodo(AST_PARAMETRO, "parametro");
+            
+            // ✓ CORRECCIÓN: $3 es char*, no NodoAST*
+            NodoAST* tipo = crearNodo(AST_TIPO, $3);
+            tipo->linea = @3.first_line; tipo->columna = @3.first_column;
+            agregarHijo(param, tipo);
+            
+            NodoAST* id = crearNodo(AST_IDENTIFICADOR, $4);
+            id->linea = @4.first_line; id->columna = @4.first_column;
+            agregarHijo(param, id);
+            
+            agregarHijo(lista, param);
+            free($3);  // ✓ Liberar la memoria del string
+            $$ = lista;
+        } else {
+            NodoAST* param = crearNodo(AST_PARAMETRO, "parametro");
+            
+            // ✓ CORRECCIÓN: $3 es char*, no NodoAST*
+            NodoAST* tipo = crearNodo(AST_TIPO, $3);
+            tipo->linea = @3.first_line; tipo->columna = @3.first_column;
+            agregarHijo(param, tipo);
+            
+            NodoAST* id = crearNodo(AST_IDENTIFICADOR, $4);
+            id->linea = @4.first_line; id->columna = @4.first_column;
+            agregarHijo(param, id);
+            
+            agregarHijo($1, param);
+            free($3);  // ✓ Liberar la memoria del string
+            $$ = $1;
+        }
+    }
+    | TipoConCorchetes TOKEN_IDENTIFICADOR {
+        $$ = crearNodo(AST_PARAMETROS, "parametros");
+        
+        NodoAST* param = crearNodo(AST_PARAMETRO, "parametro");
+        
+        // ✓ CORRECCIÓN: $1 es char*, no NodoAST*
+        NodoAST* tipo = crearNodo(AST_TIPO, $1);
+        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
+        agregarHijo(param, tipo);
+        
+        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $2);
+        id->linea = @2.first_line; id->columna = @2.first_column;
+        agregarHijo(param, id);
+        
+        agregarHijo($$, param);
+        free($1);  // ✓ Liberar la memoria del string
+    }
     | tipo_primitivo TOKEN_IDENTIFICADOR {
         $$ = crearNodo(AST_PARAMETROS, "parametros");
         
@@ -775,23 +964,29 @@ parametros:
         
         agregarHijo($$, param);
     }
-    | tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_IDENTIFICADOR {
-        // Permitir int [] notas
-        char* buffer = malloc(strlen($1) + 3);
-        sprintf(buffer, "%s[]", $1);
-        NodoAST* param = crearNodo(AST_PARAMETRO, "parametro");
-        NodoAST* tipo = crearNodo(AST_TIPO, buffer);
-        tipo->linea = @1.first_line; tipo->columna = @1.first_column;
-        agregarHijo(param, tipo);
-        NodoAST* id = crearNodo(AST_IDENTIFICADOR, $4);
-        id->linea = @4.first_line; id->columna = @4.first_column;
-        agregarHijo(param, id);
-        $$ = crearNodo(AST_PARAMETROS, "parametros");
-        agregarHijo($$, param);
-        free(buffer);
-    }
 ;
 
+// En parser.y, agregar nueva regla para manejar múltiples corchetes
+TipoConCorchetes:
+    tipo_primitivo {
+        $$ = strdup($1);
+    }
+    | tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER {
+        char* buffer = malloc(strlen($1) + 3);
+        sprintf(buffer, "%s[]", $1);
+        $$ = buffer;
+    }
+    | tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER {
+        char* buffer = malloc(strlen($1) + 5);
+        sprintf(buffer, "%s[][]", $1);
+        $$ = buffer;
+    }
+    | tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER {
+        char* buffer = malloc(strlen($1) + 7);
+        sprintf(buffer, "%s[][][]", $1);
+        $$ = buffer;
+    }
+;
 
 tipo_primitivo
     : TOKEN_DINT      { $$ = strdup($1); }
@@ -1403,8 +1598,6 @@ instruccion_for:
 
 NodoAST* crear_asignacion_compuesta(char* id, char* operador, NodoAST* expr, 
                                   int id_linea, int id_columna, int op_linea, int op_columna) {
-    (void)op_columna;
-    (void)op_linea;
     NodoAST* asig = crearNodo(AST_ASIGNACION_COMPUESTA, operador); // <--- Cambia aquí
     asig->linea = id_linea;
     asig->columna = id_columna;

@@ -28,7 +28,7 @@ ifdef archivo
         COMPILE_CMD = \
             $(foreach src, $(ADDITIONAL_SOURCES), $(AS) $(ASFLAGS) $(SRC_DIR)/$(src) -o $(OBJ_DIR)/$(basename $(src)).o;) \
             $(AS) $(ASFLAGS) $(SRC_DIR)/$(SOURCE) -o $(OBJECT); \
-            $(LD) $(LDFLAGS) -e main $(OBJECT) $(ADDITIONAL_OBJECTS) -o $(TARGET) -lc --dynamic-linker /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1
+            $(LD) $(LDFLAGS) -e _start $(OBJECT) $(ADDITIONAL_OBJECTS) -o $(TARGET) -lc --dynamic-linker /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1
     else
         $(error El archivo debe tener extensión .s)
     endif

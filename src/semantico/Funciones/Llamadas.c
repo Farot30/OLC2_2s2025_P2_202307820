@@ -5,6 +5,7 @@
 #include "Llamadas.h"
 #include "Funcion.h"
 #include "../../simbolos/Evaluador.h"
+#include "../Vectores/acceso_matriz.h"
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
@@ -59,6 +60,37 @@ void inicializarSistemaGenerico() {
         }
         generic_memo_initialized = 1;
         printf("[DEBUG GENERIC] Sistema genérico de recursividad inicializado\n");
+    }
+}
+
+void copiarMatrizComoParametro(Simbolo* destino, Simbolo* origen) {
+    if (!destino || !origen || origen->clase != SIMBOLO_MATRIZ) {
+        return;
+    }
+    
+    destino->clase = SIMBOLO_MATRIZ;
+    
+    // **COPIAR DIMENSIONES DESDE EL VALOR DE LA MATRIZ**
+    if (origen->valor.v.s) {
+        int numFilas = 0;
+        int numColumnas = 0;
+        analizarDimensionesMatriz(origen->valor.v.s, &numFilas, &numColumnas);
+        
+        destino->filas = numFilas;
+        destino->columnas = numColumnas;
+        
+        // Copiar el contenido de la matriz
+        destino->valor.v.s = strdup(origen->valor.v.s);
+        destino->valor.inicializado = 1;
+        destino->valor.tipo = TIPO_STRING; // **Almacenamiento interno como STRING**
+        
+        printf("[DEBUG] Matriz copiada como parámetro: '%s' -> '%s', dimensiones: %dx%d\n",
+               origen->nombre, destino->nombre, destino->filas, destino->columnas);
+    } else {
+        printf("[ERROR] Matriz origen no tiene valor inicializado\n");
+        destino->filas = 0;
+        destino->columnas = 0;
+        destino->valor.inicializado = 0;
     }
 }
 
@@ -299,7 +331,36 @@ void copiarVectorComoParametro(Simbolo* destino, Simbolo* origen) {
     }
     
     destino->clase = SIMBOLO_VECTOR;
-    destino->longitud = origen->longitud;
+    
+    // *** CORRECCIÓN CRÍTICA: Calcular longitud real ***
+    if (origen->valor.v.s) {
+        // Contar elementos en el string del vector
+        char* vectorStr = strdup(origen->valor.v.s);
+        int numElementos = 0;
+        
+        // Remover corchetes si los hay
+        if (vectorStr[0] == '[') {
+            memmove(vectorStr, vectorStr + 1, strlen(vectorStr));
+            int len = strlen(vectorStr);
+            if (len > 0 && vectorStr[len - 1] == ']') {
+                vectorStr[len - 1] = '\0';
+            }
+        }
+        
+        // Contar elementos separados por comas (si el vector no está vacío)
+        if (strlen(vectorStr) > 0) {
+            char* token = strtok(vectorStr, ",");
+            while (token != NULL) {
+                numElementos++;
+                token = strtok(NULL, ",");
+            }
+        }
+        
+        destino->longitud = numElementos;
+        free(vectorStr);
+    } else {
+        destino->longitud = 0;
+    }
     
     if (origen->valor.v.s) {
         destino->valor.v.s = strdup(origen->valor.v.s);
@@ -411,25 +472,35 @@ ValorSimbolo evaluarArgumentoSeguro(NodoAST* nodo, const char* nombreFuncion) {
         // Caso especial para resta en argumentos de función
         if (strcmp(nodo->valor, "-") == 0) {
             ValorSimbolo izq = evaluarExpr(nodo->hijos[0]);
+            ValorSimbolo der = evaluarExpr(nodo->hijos[1]);
             
-            int valorOriginal = 0;
-            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
-                const char* nombreVar = nodo->hijos[0]->valor;
-                valorOriginal = izq.v.i;
-                
-                printf("[DEBUG ARGUMENTO] Evaluando %s con expresión %s-%s (valor original: %d)\n", 
-                       nombreFuncion, nombreVar, nodo->hijos[1]->valor, valorOriginal);
+            // **VERIFICAR que ambos operandos estén inicializados**
+            if (!izq.inicializado) {
+                printf("[ERROR ARGUMENTO] Operando izquierdo no inicializado en %s\n", nombreFuncion);
+                ValorSimbolo error = {0};
+                return error;
             }
             
-            ValorSimbolo der = evaluarExpr(nodo->hijos[1]);
+            if (!der.inicializado) {
+                printf("[ERROR ARGUMENTO] Operando derecho no inicializado en %s\n", nombreFuncion);
+                ValorSimbolo error = {0};
+                return error;
+            }
+            
+            // **VERIFICAR que ambos sean enteros**
+            if (izq.tipo != TIPO_INT || der.tipo != TIPO_INT) {
+                printf("[ERROR ARGUMENTO] Operación aritmética requiere enteros en %s\n", nombreFuncion);
+                ValorSimbolo error = {0};
+                return error;
+            }
             
             ValorSimbolo resultado = {0};
             resultado.inicializado = 1;
             resultado.tipo = TIPO_INT;
-            resultado.v.i = valorOriginal - der.v.i;
+            resultado.v.i = izq.v.i - der.v.i;
             
-            printf("[DEBUG ARGUMENTO] Resultado seguro: %d - %d = %d\n", 
-                   valorOriginal, der.v.i, resultado.v.i);
+            printf("[DEBUG ARGUMENTO] Evaluando %s con expresión %d - %d = %d\n", 
+                   nombreFuncion, izq.v.i, der.v.i, resultado.v.i);
             
             return resultado;
         }
@@ -441,7 +512,6 @@ ValorSimbolo evaluarArgumentoSeguro(NodoAST* nodo, const char* nombreFuncion) {
     
     return evaluarExpr(nodo);
 }
-
 // Función para evaluar la llamada y obtener el valor de retorno
 ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
     ValorSimbolo resultadoFuncion;
@@ -540,7 +610,9 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
     // Guardar argumentos en un array temporal
     ValorSimbolo argumentosEvaluados[20] = {0};
     Simbolo* argumentosVector[20] = {0};
+    Simbolo* argumentosMatriz[20] = {0};
     int esVectorArg[20] = {0};
+    int esMatrizArg[20] = {0};
 
     // Evaluar cada argumento y guardar su valor
     for (int i = 0; i < numArgs && i < 20; i++) {
@@ -548,9 +620,13 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
         
         NodoAST* paramDef = parametrosDef->hijos[i];
         NodoAST* tipoParam = paramDef->hijos[0];
-        esVectorArg[i] = esTipoVector(tipoParam->valor);
+        esMatrizArg[i] = esTipoMatriz(tipoParam->valor);
+
+        if (!esMatrizArg[i]) {
+            esVectorArg[i] = esTipoVector(tipoParam->valor);
+        }
         
-        if (!esVectorArg[i]) {
+        if (!esVectorArg[i] && !esMatrizArg[i]) {
             if (strcmp(idNodo->valor, "fibonacci") == 0) {
                 argumentosEvaluados[i] = evaluarArgumentoSeguro(parametrosLlamada->hijos[i], idNodo->valor);
                 
@@ -607,6 +683,15 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
             } else {
                 argumentosEvaluados[i] = evaluarExpr(parametrosLlamada->hijos[i]);
             }
+        } else if (esMatrizArg[i]) {
+        // **NUEVO: Caso matriz**
+            NodoAST* argNodo = parametrosLlamada->hijos[i];
+            if (argNodo->tipo == AST_IDENTIFICADOR) {
+                argumentosMatriz[i] = buscarSimbolo(argNodo->valor);
+                printf("[DEBUG] Argumento matriz %d referenciado: %s\n", 
+                    i, argNodo->valor);
+            }
+        
         } else {
             NodoAST* argNodo = parametrosLlamada->hijos[i];
             if (argNodo->tipo == AST_IDENTIFICADOR) {
@@ -646,9 +731,15 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
         NodoAST* idParam = param->hijos[1];
         const char* nombreParam = idParam->valor;
         
-        // Determinar el tipo base
+        // **NUEVO: Determinar el tipo base considerando matrices**
         TipoDato tipoParametro;
-        if (esVectorArg[i]) {
+        if (esMatrizArg[i]) {
+            char tipoBase[50] = {0};
+            char* pos = strstr(tipoParam->valor, "[][]");
+            size_t len = pos - tipoParam->valor;
+            strncpy(tipoBase, tipoParam->valor, len);
+            tipoParametro = obtenerTipoDesdeString(tipoBase);
+        } else if (esVectorArg[i]) {
             char tipoBase[50] = {0};
             strncpy(tipoBase, tipoParam->valor, strlen(tipoParam->valor) - 2);
             tipoParametro = obtenerTipoDesdeString(tipoBase);
@@ -657,8 +748,8 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
         }
         
         // Asignar valor según tipo
-        if (!esVectorArg[i]) {
-            // Caso normal: usar valor pre-evaluado
+        if (!esVectorArg[i] && !esMatrizArg[i]) {
+            // **CÓDIGO EXISTENTE para tipos primitivos**
             ValorSimbolo valorArg = argumentosEvaluados[i];
             if (!valorArg.inicializado) {
                 char msg[200];
@@ -685,25 +776,56 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
                 continue;
             }
             
-            // Declarar el parámetro en el ámbito de la función
+            // *** DECLARAR EL PARÁMETRO EN EL ÁMBITO LOCAL ***
             if (!buscarSimboloEnAmbito(nombreParam, ambitoActual())) {
                 agregarSimboloDetallado(nombreParam, SIMBOLO_VARIABLE, tipoParametro, 
-                                      ambitoActual(), idParam->linea, idParam->columna);
+                                    ambitoActual(), idParam->linea, idParam->columna);
             }
             
+            // *** ASIGNAR EL VALOR EVALUADO AL PARÁMETRO LOCAL ***
             Simbolo* paramSim = buscarSimboloEnAmbito(nombreParam, ambitoActual());
             if (paramSim) {
+                // Conversión de tipos si es necesario
                 if (valorArg.tipo != paramSim->tipo && 
                     esWidening(valorArg.tipo, paramSim->tipo)) {
                     valorArg = convertirValor(valorArg, paramSim->tipo);
                 }
+                
+                // *** ASIGNACIÓN DIRECTA DEL VALOR ***
                 paramSim->valor = valorArg;
-                paramSim->inicializado = 1;
                 paramSim->valor.inicializado = 1;
-                printf("[DEBUG] Parámetro '%s' inicializado con valor\n", nombreParam);
+                
+                printf("[DEBUG] Parámetro '%s' inicializado con valor %d en ámbito '%s'\n", 
+                    nombreParam, valorArg.v.i, ambitoActual());
+            } else {
+                printf("[ERROR] No se pudo crear parámetro '%s'\n", nombreParam);
+            }
+        } else if (esMatrizArg[i]) {
+            // **NUEVO: Caso matriz - usar símbolo matriz pre-referenciado**
+            Simbolo* simboloArg = argumentosMatriz[i];
+            if (!simboloArg || simboloArg->clase != SIMBOLO_MATRIZ) {
+                char msg[200];
+                snprintf(msg, sizeof(msg), "El argumento para matriz '%s' no es válido", nombreParam);
+                addError(msg, ambitoActual(), 
+                        parametrosLlamada->hijos[i]->linea, 
+                        parametrosLlamada->hijos[i]->columna);
+                printf("[ERROR] %s\n", msg);
+                continue;
+            }
+            
+            // Declarar el parámetro matriz en el ámbito de la función
+            if (!buscarSimboloEnAmbito(nombreParam, ambitoActual())) {
+                agregarSimboloDetallado(nombreParam, SIMBOLO_MATRIZ, tipoParametro,
+                                        ambitoActual(), idParam->linea, idParam->columna);
+            }
+            
+            Simbolo* paramSim = buscarSimboloEnAmbito(nombreParam, ambitoActual());
+            if (paramSim) {
+                copiarMatrizComoParametro(paramSim, simboloArg);
+                printf("[DEBUG] Parámetro matriz '%s' inicializado\n", nombreParam);
             }
         } else {
-            // Caso vector: usar símbolo vector pre-referenciado
+            // **CÓDIGO EXISTENTE: Caso vector**
             Simbolo* simboloArg = argumentosVector[i];
             if (!simboloArg || simboloArg->clase != SIMBOLO_VECTOR) {
                 char msg[200];
@@ -746,129 +868,146 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
         return resultadoFuncion;
     }
 
+    int esFuncionMatriz = 0;
+    if (simboloFuncion->nodo_params && simboloFuncion->nodo_params->num_hijos > 0) {
+        // **BUSCAR EL TIPO DE RETORNO EN LOS PARÁMETROS DE LA FUNCIÓN**
+        for (int p = 0; p < simboloFuncion->nodo_params->num_hijos; p++) {
+            NodoAST* param = simboloFuncion->nodo_params->hijos[p];
+            if (param && param->num_hijos >= 2) {
+                NodoAST* tipoParam = param->hijos[0];
+                if (tipoParam && tipoParam->tipo == AST_TIPO && tipoParam->valor) {
+                    if (strstr(tipoParam->valor, "[][]") != NULL) {
+                        esFuncionMatriz = 1;
+                        printf("[DEBUG] Función '%s' detectada como función matriz por parámetro '%s'\n", 
+                            idNodo->valor, tipoParam->valor);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!esFuncionMatriz && simboloFuncion->tipo == TIPO_INT) {
+        // **BUSCAR EN EL NODO DE LA FUNCIÓN EL TIPO DE RETORNO ORIGINAL**
+        // Esto es necesario porque obtenerTipoDesdeString convierte "int[][]" a TIPO_INT
+        // pero necesitamos saber si originalmente era una matriz
+        
+        // **HEURÍSTICA: Si la función retorna un STRING y tiene parámetros matriz, es función matriz**
+        if (hayRetorno && stackRetorno.tope > topeStackAnterior) {
+            RetornoInfo peek = stackRetorno.items[stackRetorno.tope - 1];
+            if (peek.valor.tipo == TIPO_STRING && peek.valor.v.s && 
+                peek.valor.v.s[0] == '[' && peek.valor.v.s[1] == '[') {
+                esFuncionMatriz = 1;
+                printf("[DEBUG] Función '%s' detectada como función matriz por valor de retorno\n", 
+                    idNodo->valor);
+            }
+        }
+    }
     // Ejecutar el bloque de la función
     printf("[DEBUG] Ejecutando bloque de la función '%s'\n", idNodo->valor);
     ResultadoEjecucion resEjec = ejecutarNodoAST(bloqueNodo);
 
-    // OBTENER RESULTADO DEL STACK
-    if (resEjec == EJEC_RETURN && hayRetorno) {
+    // ==== PROCESAR RETURN (UNIVERSAL) ====
+    int huboReturn = (resEjec == EJEC_RETURN) || (hayRetorno && stackRetorno.tope > topeStackAnterior);
+
+    if (huboReturn && stackRetorno.tope > topeStackAnterior) {
         printf("[DEBUG] Se detectó return en función '%s'\n", idNodo->valor);
 
-        // Tratamiento especial para suma en funciones recursivas
-        if (strcmp(idNodo->valor, "fibonacci") == 0 || 
-            strcmp(idNodo->valor, "factorial") == 0 ||
-            strcmp(idNodo->valor, "potencia") == 0) {
-            
-            if (bloqueNodo->num_hijos > 0) {
-                // Buscar un nodo return con una operación binaria
-                for (int i = 0; i < bloqueNodo->num_hijos; i++) {
-                    NodoAST* hijo = bloqueNodo->hijos[i];
-                    if (hijo && hijo->tipo == AST_RETURN && hijo->num_hijos == 1) {
-                        NodoAST* expr = hijo->hijos[0];
-                        if (expr && expr->tipo == AST_OPERACION) {
-                            printf("[DEBUG RECURSION] Detectada operación en return de función recursiva\n");
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Buscar el valor de retorno correspondiente a este nivel
-        if (stackRetorno.tope > topeStackAnterior) {
-            // Obtener el último valor agregado al stack
+        if (stackRetorno.tope <= 0) {
+            printf("[ERROR] Stack de retorno vacío inesperadamente\n");
+        } else {
             RetornoInfo info = stackRetorno.items[stackRetorno.tope - 1];
-            
-            // Verificar que corresponda a este nivel
-            if (info.nivel_funcion == nivel_funcion_actual) {
-                stackRetorno.tope--; // Pop del stack
-                
-                // Verificar compatibilidad de tipos
-                if (info.valor.tipo == simboloFuncion->tipo || 
-                    esWidening(info.valor.tipo, simboloFuncion->tipo)) {
-                    
-                    if (info.valor.tipo != simboloFuncion->tipo) {
-                        resultadoFuncion = convertirValor(info.valor, simboloFuncion->tipo);
-                        // Liberar string anterior si existe
-                        if (info.valor.tipo == TIPO_STRING && info.valor.v.s) {
-                            free(info.valor.v.s);
-                        }
-                    } else {
-                        resultadoFuncion = info.valor;
-                    }
-                    
-                    printf("[DEBUG] Función '%s' retorna valor de tipo %s\n", 
-                           idNodo->valor, nombreTipo(resultadoFuncion.tipo));
-                    
-                    // Debug del valor retornado
-                    switch (resultadoFuncion.tipo) {
-                        case TIPO_INT: 
-                            printf("[DEBUG] Valor retornado: %d\n", resultadoFuncion.v.i); 
-                            break;
-                        case TIPO_FLOAT: 
-                            printf("[DEBUG] Valor retornado: %f\n", resultadoFuncion.v.f); 
-                            break;
-                        case TIPO_DOUBLE: 
-                            printf("[DEBUG] Valor retornado: %lf\n", resultadoFuncion.v.d); 
-                            break;
-                        case TIPO_CHAR: 
-                            printf("[DEBUG] Valor retornado: '%c'\n", resultadoFuncion.v.c); 
-                            break;
-                        case TIPO_BOOLEAN: 
-                            printf("[DEBUG] Valor retornado: %s\n", 
-                                   resultadoFuncion.v.b ? "true" : "false"); 
-                            break;
-                        case TIPO_STRING: 
-                            printf("[DEBUG] Valor retornado: \"%s\"\n", 
-                                   resultadoFuncion.v.s ? resultadoFuncion.v.s : "(null)"); 
-                            break;
-                        default: 
-                            printf("[DEBUG] Valor retornado: <tipo desconocido>\n"); 
-                            break;
-                    }
-                } else {
-                    char msg[200];
-                    snprintf(msg, sizeof(msg), 
-                            "Tipo de retorno incompatible: esperado %s, encontrado %s",
-                            nombreTipo(simboloFuncion->tipo), nombreTipo(info.valor.tipo));
-                    addError(msg, ambitoActual(), idNodo->linea, idNodo->columna);
-                    printf("[ERROR] %s\n", msg);
-                    
-                    // Liberar memoria si es string
-                    if (info.valor.tipo == TIPO_STRING && info.valor.v.s) {
-                        free(info.valor.v.s);
-                    }
-                }
-            } else {
+
+            // Verificar nivel
+            if (info.nivel_funcion != nivel_funcion_actual) {
                 printf("[ERROR] Nivel de función no coincide: esperado %d, encontrado %d\n",
                        nivel_funcion_actual, info.nivel_funcion);
+                resultadoFuncion.inicializado = 0;
+            } else {
+                // Pop UNA SOLA VEZ
+                stackRetorno.tope--;
+
+                // Detectar si el valor representa una matriz (STRING comenzando con [[)
+                int esRetornoMatriz = (info.valor.tipo == TIPO_STRING &&
+                                       info.valor.v.s &&
+                                       info.valor.v.s[0] == '[' &&
+                                       info.valor.v.s[1] == '[');
+
+                if (esRetornoMatriz) {
+                    // FUNCIÓN MATRIZ: tipo base pero contenido como string
+                    resultadoFuncion.inicializado = 1;
+                    resultadoFuncion.tipo = simboloFuncion->tipo; // tipo base (int)
+                    resultadoFuncion.v.s = strdup(info.valor.v.s); // contenido matriz
+                    
+                    printf("[DEBUG RETURN] Matriz retornada: %s (tipo base %s)\n",
+                           resultadoFuncion.v.s, nombreTipo(resultadoFuncion.tipo));
+                    
+                    // Liberar string temporal del stack
+                    if (info.valor.v.s) free(info.valor.v.s);
+                } else {
+                    // RETORNO PRIMITIVO NORMAL
+                    if (info.valor.inicializado &&
+                        (info.valor.tipo == simboloFuncion->tipo ||
+                         esWidening(info.valor.tipo, simboloFuncion->tipo))) {
+
+                        if (info.valor.tipo != simboloFuncion->tipo) {
+                            resultadoFuncion = convertirValor(info.valor, simboloFuncion->tipo);
+                            if (info.valor.tipo == TIPO_STRING && info.valor.v.s) free(info.valor.v.s);
+                        } else {
+                            resultadoFuncion = info.valor;
+                        }
+                        
+                        printf("[DEBUG RETURN] Retorno primitivo tipo %s valor %d\n",
+                               nombreTipo(resultadoFuncion.tipo), resultadoFuncion.v.i);
+                    } else {
+                        printf("[ERROR] Tipo de retorno incompatible: esperado %s, recibido %s\n",
+                               nombreTipo(simboloFuncion->tipo), nombreTipo(info.valor.tipo));
+                        if (info.valor.tipo == TIPO_STRING && info.valor.v.s) free(info.valor.v.s);
+                        resultadoFuncion.inicializado = 0;
+                    }
+                }
             }
         }
     } else {
-        printf("[ADVERTENCIA] No se detectó return en función '%s' con tipo de retorno\n", 
-               idNodo->valor);
+        // No hubo return válido
         if (simboloFuncion->tipo != TIPO_VOID) {
             char msg[200];
-            snprintf(msg, sizeof(msg), 
-                    "La función '%s' con tipo de retorno %s debe tener un return",
-                    idNodo->valor, nombreTipo(simboloFuncion->tipo));
+            snprintf(msg, sizeof(msg),
+                     "La función '%s' con tipo de retorno %s debe tener un return",
+                     idNodo->valor, nombreTipo(simboloFuncion->tipo));
             addError(msg, ambitoActual(), idNodo->linea, idNodo->columna);
             printf("[ERROR] %s\n", msg);
         }
+        resultadoFuncion.inicializado = 0;
     }
 
-    // MANEJO GENÉRICO POST-EJECUCIÓN
+    // Verificación final
+    if (!resultadoFuncion.inicializado) {
+        printf("[ERROR] La función '%s' no retornó un valor válido\n", idNodo->valor);
+    } else {
+        printf("[DEBUG] Función '%s' completada OK. Tipo: %s\n",
+               idNodo->valor, nombreTipo(resultadoFuncion.tipo));
+        
+        if (resultadoFuncion.tipo == TIPO_STRING && resultadoFuncion.v.s && 
+            resultadoFuncion.v.s[0] == '[') {
+            printf("[DEBUG] Contenido matriz retornada: %s\n", resultadoFuncion.v.s);
+        } else if (resultadoFuncion.tipo == TIPO_INT) {
+            printf("[DEBUG] Retorno primitivo tipo int: %d\n", resultadoFuncion.v.i);
+        } else {
+            printf("[DEBUG] Retorno de tipo desconocido o no inicializado\n");
+        }
+
+    }
+
+    // MANEJO GENÉRICO POST-EJECUCIÓN (solo si hubo resultado válido)
     if (esFuncionGenericaRec && resultadoFuncion.inicializado) {
-        // Guardar resultado en caché
+        printf("[DEBUG LLAMADAS] === PROCESANDO FUNCIÓN GENÉRICA ===\n");
         guardarEnCacheGenerico(idNodo->valor, hash_params, resultadoFuncion);
-        
-        // Salir del frame recursivo
         salirFrameGenerico(idNodo->valor);
-        
-        printf("[DEBUG GENERIC] Función genérica %s completada, resultado: %d\n", 
-               idNodo->valor, resultadoFuncion.v.i);
+        printf("[DEBUG GENERIC] Función genérica %s completada\n", idNodo->valor);
     }
 
-    // RESTAURAR ESTADO ANTERIOR
+    
     hayRetorno = hayRetornoAnterior;
     nivel_funcion_actual = nivelAnterior;
     
@@ -876,6 +1015,7 @@ ValorSimbolo EvaluarLlamadaFuncion(NodoAST* nodo) {
            idNodo->valor, nivel_funcion_actual);
     contexto_funcion--;
     salirAmbito();
+
 
     return resultadoFuncion;
 }

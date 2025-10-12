@@ -1,8 +1,8 @@
 #include "declaraciones_arm64.h"
 #include "declaracionConst_arm64.h"
 #include "Operadores_arm64.h"
-#include "../semantico/tipos.h"
-#include "../semantico/semantico.h"
+#include "../../semantico/tipos.h"
+#include "../../semantico/semantico.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -233,23 +233,43 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
     } else if (tipo == TIPO_BOOLEAN) {
         tipoDeclaracion = "byte";
     } else if (tipo == TIPO_STRING) {
-        tipoDeclaracion = "asciz";
+        
+        if (es_operacion){
+            tipoDeclaracion = "skip 8";
+
+        } else {
+            tipoDeclaracion = "asciz";
+        }
     }
 
     if (inicializado) {
         if (es_operacion) {
             // **GENERAR DECLARACIÓN CON VALOR 0 EN .data**
-            snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+            if (tipo == TIPO_STRING) {
+                snprintf(codigo, sizeof(codigo), "%s: .skip 8\n", nombreVariable);
+            } else {
+                snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+            }
             insertarEnSeccionData(gen, codigo);
             //if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
 
             // **GENERAR CÓDIGO DE OPERACIÓN EN .text**
             generarCodigoOperacionARM64(gen, nombreVariable, valorNodo, tipo);
-        } else {
+        }  else {
             // Declaración normal con valor literal
-            snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+            if (tipo == TIPO_STRING) {
+                // **CORREGIR: Asegurar comillas en strings literales**
+                if (valorStr[0] != '"') {
+                    char valorConComillas[128];
+                    snprintf(valorConComillas, sizeof(valorConComillas), "\"%s\"", valorStr);
+                    snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorConComillas);
+                } else {
+                    snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+                }
+            } else {
+                snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+            }
             insertarEnSeccionData(gen, codigo);
-            //if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
         }
     } else {
         // Variable no inicializada va a .bss
@@ -257,7 +277,7 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         if (tipo == TIPO_DOUBLE) espacio = 8;
         else if (tipo == TIPO_FLOAT) espacio = 4;
         else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) espacio = 1;
-        else if (tipo == TIPO_STRING) espacio = 32;
+        else if (tipo == TIPO_STRING) espacio = 8;
         
         snprintf(codigo, sizeof(codigo), "%s: .space %zu\n", nombreVariable, espacio);
         insertarEnSeccionBss(gen, codigo);

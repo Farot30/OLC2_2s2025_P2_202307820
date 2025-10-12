@@ -27,20 +27,22 @@ static char* concat3(const char* s1, const char* s2, const char* s3) {
     
     return result;
 }
+
 // Función para evaluar AST_PARSEJOIN
 ValorSimbolo evaluarParseJoin(NodoAST* e) {
+    printf("[DEBUG evaluarParseJoin] === INICIO ===\n");
     ValorSimbolo r;
     memset(&r, 0, sizeof(r));
     r.tipo = TIPO_STRING;
     r.inicializado = 0;
 
     if (e->num_hijos < 2) {
-        printf("[ERROR] String.join requiere al menos un delimitador y un elemento\n");
         return r;
     }
 
     // Evaluar el delimitador
     ValorSimbolo delimitador = evaluarExpr(e->hijos[0]);
+    
     if (!delimitador.inicializado || delimitador.tipo != TIPO_STRING) {
         char msg[200];
         snprintf(msg, sizeof(msg), "El delimitador de String.join debe ser una cadena, se recibió %s", 
@@ -50,74 +52,158 @@ ValorSimbolo evaluarParseJoin(NodoAST* e) {
         return r;
     }
 
-    // Obtener el nodo de la lista de expresiones
+    // Obtener el nodo de la lista (segundo argumento)
     NodoAST* lista = e->hijos[1];
-    if (lista->tipo != AST_LISTA) {
-        printf("[ERROR] Se esperaba una lista de expresiones para String.join\n");
+    
+    // **CASO ESPECIAL: Si la lista contiene un identificador de vector**
+    if (lista->tipo == AST_LISTA && lista->num_hijos == 1 && lista->hijos[0]->tipo == AST_IDENTIFICADOR) {
+        
+        NodoAST* idNodo = lista->hijos[0];
+        
+        Simbolo* vectorSimbolo = buscarSimbolo(idNodo->valor);
+        
+        
+        if (vectorSimbolo && vectorSimbolo->clase == SIMBOLO_VECTOR) {
+            
+            // Procesar el string del vector para extraer elementos individuales
+            if (vectorSimbolo->valor.inicializado && vectorSimbolo->valor.v.s) {
+                char* vectorStr = strdup(vectorSimbolo->valor.v.s);
+                
+                // Remover corchetes externos [...]
+                if (vectorStr[0] == '[') {
+                    memmove(vectorStr, vectorStr + 1, strlen(vectorStr));
+                    int len = strlen(vectorStr);
+                    if (len > 0 && vectorStr[len - 1] == ']') {
+                        vectorStr[len - 1] = '\0';
+                    }
+                }
+                
+                // Inicializar resultado
+                char* resultado_final = NULL;
+                
+                // Dividir por comas y procesar cada elemento
+                char* saveptr;
+                char* token = strtok_r(vectorStr, ",", &saveptr);
+                int esPrimerElemento = 1;
+                int contadorElementos = 0;
+                
+                
+                while (token != NULL) {
+                    contadorElementos++;
+                    
+                    // Limpiar espacios al inicio
+                    while (*token == ' ' || *token == '\t') token++;
+                    
+                    // Limpiar espacios al final
+                    char* fin = token + strlen(token) - 1;
+                    while (fin > token && (*fin == ' ' || *fin == '\t')) {
+                        *fin = '\0';
+                        fin--;
+                    }
+                    
+                    
+                    // Remover comillas si las hay
+                    if (token[0] == '"' && strlen(token) > 1 && token[strlen(token)-1] == '"') {
+                        token[strlen(token)-1] = '\0';
+                        token++;
+                    }
+                    
+                    
+                    if (esPrimerElemento) {
+                        // Primer elemento: crear el string inicial
+                        resultado_final = strdup(token);
+                        esPrimerElemento = 0;
+                    } else {
+                        char* temp = resultado_final;
+                        resultado_final = concat3(temp, delimitador.v.s, token);
+                        printf("[DEBUG evaluarParseJoin] Resultado parcial: '%s'\n", resultado_final);
+                        free(temp);
+                    }
+                    
+                    token = strtok_r(NULL, ",", &saveptr);
+                }
+                
+                
+                // Asignar resultado
+                r.inicializado = 1;
+                r.v.s = resultado_final ? resultado_final : strdup("");
+                
+                free(vectorStr);
+                return r;
+            } else {
+            }
+        } else {
+        }
+    }
+    
+    // **CASO NORMAL: Lista de expresiones múltiples (AST_LISTA)**
+    if (lista->tipo == AST_LISTA) {
+        // Inicializar resultado como cadena vacía
+        r.inicializado = 1;
+        r.v.s = strdup("");
+
+        // Unir las expresiones con el delimitador
+        for (int i = 0; i < lista->num_hijos; i++) {
+            // Evaluar la expresión actual
+            ValorSimbolo elem = evaluarExpr(lista->hijos[i]);
+            if (!elem.inicializado) {
+                char msg[200];
+                snprintf(msg, sizeof(msg), "Elemento no inicializado en String.join");
+                addError(msg, ambitoActual(), e->linea, e->columna);
+                printf("[ERROR] %s\n", msg);
+                if (r.v.s) free(r.v.s);
+                r.inicializado = 0;
+                return r;
+            }
+
+            // Convertir el elemento a string si no lo es
+            char* elemStr;
+            if (elem.tipo == TIPO_STRING && elem.v.s) {
+                elemStr = strdup(elem.v.s);
+            } else {
+                // Convertir otros tipos a string
+                char buffer[256];
+                switch (elem.tipo) {
+                    case TIPO_INT:
+                        snprintf(buffer, sizeof(buffer), "%d", elem.v.i);
+                        break;
+                    case TIPO_FLOAT:
+                        snprintf(buffer, sizeof(buffer), "%f", elem.v.f);
+                        break;
+                    case TIPO_DOUBLE:
+                        snprintf(buffer, sizeof(buffer), "%f", elem.v.d);
+                        break;
+                    case TIPO_CHAR:
+                        snprintf(buffer, sizeof(buffer), "%c", elem.v.c);
+                        break;
+                    case TIPO_BOOLEAN:
+                        snprintf(buffer, sizeof(buffer), "%s", elem.v.b ? "true" : "false");
+                        break;
+                    default:
+                        buffer[0] = '\0';
+                        break;
+                }
+                elemStr = strdup(buffer);
+            }
+
+            if (i > 0 && delimitador.v.s) {
+                // Usar concat3 para unir: resultado_actual + delimitador + nuevo_elemento
+                char* temp = r.v.s;
+                r.v.s = concat3(temp, delimitador.v.s, elemStr);
+                free(temp);
+            } else {
+                // Para el primer elemento, simplemente asignar
+                if (r.v.s) free(r.v.s);
+                r.v.s = strdup(elemStr);
+            }
+            
+            free(elemStr);
+        }
+
+        printf("[DEBUG evaluarParseJoin] Resultado lista normal: '%s'\n", r.v.s ? r.v.s : "(null)");
         return r;
     }
-
-    // Inicializar resultado como cadena vacía
-    r.inicializado = 1;
-    r.v.s = strdup("");
-
-    // Unir las expresiones con el delimitador
-    for (int i = 0; i < lista->num_hijos; i++) {
-        // Evaluar la expresión actual
-        ValorSimbolo elem = evaluarExpr(lista->hijos[i]);
-        if (!elem.inicializado) {
-            char msg[200];
-            snprintf(msg, sizeof(msg), "Elemento no inicializado en String.join");
-            addError(msg, ambitoActual(), e->linea, e->columna);
-            printf("[ERROR] %s\n", msg);
-            if (r.v.s) free(r.v.s);
-            r.inicializado = 0;
-            return r;
-        }
-
-        // Convertir el elemento a string si no lo es
-        char* elemStr;
-        if (elem.tipo == TIPO_STRING && elem.v.s) {
-            elemStr = strdup(elem.v.s);
-        } else {
-            // Convertir otros tipos a string
-            char buffer[256];
-            switch (elem.tipo) {
-                case TIPO_INT:
-                    snprintf(buffer, sizeof(buffer), "%d", elem.v.i);
-                    break;
-                case TIPO_FLOAT:
-                    snprintf(buffer, sizeof(buffer), "%f", elem.v.f);
-                    break;
-                case TIPO_DOUBLE:
-                    snprintf(buffer, sizeof(buffer), "%f", elem.v.d);
-                    break;
-                case TIPO_CHAR:
-                    snprintf(buffer, sizeof(buffer), "%c", elem.v.c);
-                    break;
-                case TIPO_BOOLEAN:
-                    snprintf(buffer, sizeof(buffer), "%s", elem.v.b ? "true" : "false");
-                    break;
-                default:
-                    buffer[0] = '\0';
-                    break;
-            }
-            elemStr = strdup(buffer);
-        }
-
-        // Si no es el primer elemento, agregar el delimitador
-        if (i > 0 && delimitador.v.s) {
-            char* temp = r.v.s;
-            r.v.s = concat3(temp, delimitador.v.s, elemStr);
-            free(temp);
-        } else {
-            // Para el primer elemento, simplemente asignar
-            if (r.v.s) free(r.v.s);
-            r.v.s = elemStr;
-        }
-    }
-
-    printf("[DEBUG] String.join resultado: '%s'\n", r.v.s ? r.v.s : "(null)");
+    
     return r;
 }
 

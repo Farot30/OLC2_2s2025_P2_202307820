@@ -124,15 +124,14 @@ void imprimirEvaluado(NodoAST* expr) {
             unsigned int codepoint = (unsigned char)v.v.c;
             if (codepoint <= 0x7F) {
                 snprintf(buffer, sizeof(buffer), "%c", v.v.c);
-                printf("%s\n", buffer);
-                capture_print_output(buffer);
+                //printf("%s\n", buffer);
+
             } else {
                 printf("'");
                 printUnicode(codepoint);
                 printf("'\n");
                 // Opcional: también puedes guardar en buffer para capture_print_output
                 snprintf(buffer, sizeof(buffer), "\\u%04X", codepoint);
-                capture_print_output(buffer);
                 capture_print_output("\n");
             }
             break;

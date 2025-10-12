@@ -1,5 +1,5 @@
 #include "Impresion_arm64.h"
-#include "declaracionConst_arm64.h"
+#include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
 #include <stdio.h>
 #include <string.h>
 

@@ -26,6 +26,9 @@ int verificarReturnEnBloque(NodoAST* nodo) {
     
     return 0;
 }
+int esTipoMatriz(const char* tipo) {
+    return tipo && strstr(tipo, "[][]") != NULL;
+}
 
 NodoAST* encontrarNodoReturn(NodoAST* nodo) {
     if (!nodo) return NULL;
@@ -139,16 +142,26 @@ ResultadoEjecucion DeclararFuncion(NodoAST* nodo) {
             TipoDato tipoParametro;
             TipoSimbolo claseParametro = SIMBOLO_VARIABLE;
             
-            if (esTipoVector(tipoParam->valor)) {
-                // Es un tipo vector (ej: "int[]")
+            if (esTipoMatriz(tipoParam->valor)) {
+                // **NUEVO: Es un tipo matriz (ej: "int[][]")**
                 char tipoBase[50] = {0};
-                strncpy(tipoBase, tipoParam->valor, strlen(tipoParam->valor) - 2); // Quitar los corchetes
+                char* pos = strstr(tipoParam->valor, "[][]");
+                size_t len = pos - tipoParam->valor;
+                strncpy(tipoBase, tipoParam->valor, len);
                 tipoParametro = obtenerTipoDesdeString(tipoBase);
-                claseParametro = SIMBOLO_VECTOR; // Marcar como vector
+                claseParametro = SIMBOLO_MATRIZ; // **NUEVO**
+                printf("[DEBUG FUNCION] Parámetro '%s' es matriz de tipo %s\n", 
+                    idParam->valor, tipoBase);
+            } else if (esTipoVector(tipoParam->valor)) {
+                // **CÓDIGO EXISTENTE: Es un tipo vector (ej: "int[]")**
+                char tipoBase[50] = {0};
+                strncpy(tipoBase, tipoParam->valor, strlen(tipoParam->valor) - 2);
+                tipoParametro = obtenerTipoDesdeString(tipoBase);
+                claseParametro = SIMBOLO_VECTOR;
                 printf("[DEBUG FUNCION] Parámetro '%s' es vector de tipo %s\n", 
-                       idParam->valor, tipoBase);
+                    idParam->valor, tipoBase);
             } else {
-                // Es un tipo normal
+                // **CÓDIGO EXISTENTE: Es un tipo normal**
                 tipoParametro = obtenerTipoDesdeString(tipoParam->valor);
             }
             

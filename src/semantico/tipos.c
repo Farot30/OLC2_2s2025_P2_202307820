@@ -4,15 +4,51 @@
 #include <string.h>
 #include <stdlib.h>
 
-TipoDato obtenerTipoDesdeString(const char* tipoStr) {
-    if (strcmp(tipoStr, "int") == 0) return TIPO_INT;
-    if (strcmp(tipoStr, "float") == 0) return TIPO_FLOAT;
-    if (strcmp(tipoStr, "double") == 0) return TIPO_DOUBLE;
-    if (strcmp(tipoStr, "char") == 0) return TIPO_CHAR;
-    if (strcmp(tipoStr, "string") == 0) return TIPO_STRING;
-    if (strcmp(tipoStr, "boolean") == 0) return TIPO_BOOLEAN;
-    if (strcmp(tipoStr, "void") == 0 ) return TIPO_VOID;
-    if (strcmp(tipoStr, "funcion") == 0 ) return TIPO_FUNCION;
+TipoDato obtenerTipoDesdeString(const char* str) {
+    if (!str) return TIPO_DESCONOCIDO;
+    
+    // **PRIMERO: tipos primitivos**
+    if (strcmp(str, "int") == 0) return TIPO_INT;
+    if (strcmp(str, "float") == 0) return TIPO_FLOAT;
+    if (strcmp(str, "double") == 0) return TIPO_DOUBLE;
+    if (strcmp(str, "char") == 0) return TIPO_CHAR;
+    if (strcmp(str, "String") == 0) return TIPO_STRING;
+    if (strcmp(str, "string") == 0) return TIPO_STRING; // por si acaso
+    if (strcmp(str, "boolean") == 0) return TIPO_BOOLEAN;
+    if (strcmp(str, "void") == 0) return TIPO_VOID;
+    
+    // **SEGUNDO: matrices - MANTENER EL TIPO ORIGINAL**
+    if (strstr(str, "[][]") != NULL) {
+        char tipoBase[50] = {0};
+        char* pos = strstr(str, "[][]");
+        size_t len = pos - str;
+        if (len > 0 && len < sizeof(tipoBase)) {
+            strncpy(tipoBase, str, len);
+            tipoBase[len] = '\0';
+            
+            TipoDato tipoElemento = obtenerTipoDesdeString(tipoBase);
+            printf("[DEBUG TIPOS] Función matriz '%s' -> tipo base '%s' (%d)\n", 
+                   str, tipoBase, tipoElemento);
+            
+            // **RETORNAR EL TIPO BASE, NO STRING**
+            // La matriz se identifica por la clase SIMBOLO_MATRIZ, no por el tipo
+            return tipoElemento;
+        }
+    } else if (strstr(str, "[]") != NULL) {
+        char tipoBase[50] = {0};
+        size_t len = strlen(str) - 2;
+        if (len > 0 && len < sizeof(tipoBase)) {
+            strncpy(tipoBase, str, len);
+            tipoBase[len] = '\0';
+            
+            TipoDato tipoElemento = obtenerTipoDesdeString(tipoBase);
+            printf("[DEBUG TIPOS] Función vector '%s' -> tipo base '%s' (%d)\n", 
+                   str, tipoBase, tipoElemento);
+            return tipoElemento;
+        }
+    }
+    
+    printf("[DEBUG TIPOS] Tipo desconocido: '%s'\n", str);
     return TIPO_DESCONOCIDO;
 }
 

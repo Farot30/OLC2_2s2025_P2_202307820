@@ -5,6 +5,8 @@
 #include "../../AST/err.h"
 #include "../../AST/errorTIpos.h"
 #include "../../simbolos/Evaluador.h" 
+#include "../Funciones/Llamadas.h"
+#include "acceso_matriz.h"
 #include <stdio.h>
 #include <string.h> 
 #include <stdlib.h> 
@@ -52,6 +54,68 @@ int verificarDeclaracionMatriz(NodoAST* nodo) {
         idNodo->valido = 0;
         nodo->valido = 0;
         return 0;
+    }
+
+    // **NUEVO ORDEN: Caso 1 - Declaración con resultado de función (DEBE IR PRIMERO)**
+    if (tercer_nodo->tipo == AST_LLAMADA) {
+        printf("[DEBUG] Procesando matriz con resultado de función\n");
+        
+        // Evaluar la llamada a función
+        ValorSimbolo resultadoFuncion = EvaluarLlamadaFuncion(tercer_nodo);
+        
+        if (!resultadoFuncion.inicializado) {
+            printf("[ERROR] La función no retornó un valor válido\n");
+            return 0;
+        }
+        
+        // **CORREGIR: Detectar matriz por contenido, NO por tipo**
+        int esMatrizRetornada = (resultadoFuncion.v.s && 
+                                resultadoFuncion.v.s[0] == '[' && 
+                                resultadoFuncion.v.s[1] == '[');
+        
+        if (!esMatrizRetornada) {
+            printf("[ERROR] La función no retornó una matriz válida, tipo: %d, contenido: %s\n", 
+                resultadoFuncion.tipo, 
+                resultadoFuncion.v.s ? resultadoFuncion.v.s : "NULL");
+            return 0;
+        }
+        
+        printf("[DEBUG] Función retornó matriz: %s (tipo base: %s)\n", 
+            resultadoFuncion.v.s, nombreTipo(resultadoFuncion.tipo));
+        
+        // Agregar el símbolo a la tabla
+        agregarSimboloDetallado(
+            idNodo->valor,
+            SIMBOLO_MATRIZ,
+            tipo,  // tipo del elemento (int), no el tipo de retorno
+            ambitoActual(),
+            idNodo->linea,
+            idNodo->columna
+        );
+        
+        // Inicializar con el resultado de la función
+        Simbolo* simbolo = buscarSimbolo(idNodo->valor);
+        if (simbolo) {
+            simbolo->valor.v.s = strdup(resultadoFuncion.v.s);
+            simbolo->valor.inicializado = 1;
+            simbolo->valor.tipo = TIPO_STRING; // **Almacenamiento interno como STRING**
+            
+            // **EXTRAER Y ESTABLECER DIMENSIONES**
+            int numFilas = 0;
+            int numColumnas = 0;
+            analizarDimensionesMatriz(resultadoFuncion.v.s, &numFilas, &numColumnas);
+            simbolo->filas = numFilas;
+            simbolo->columnas = numColumnas;
+            
+            printf("[DEBUG] Matriz '%s' inicializada con resultado de función: %dx%d\n",
+                idNodo->valor, numFilas, numColumnas);
+            printf("[DEBUG] Contenido de la matriz: %s\n", simbolo->valor.v.s);
+        }
+        
+        // **NO liberar resultadoFuncion.v.s aquí, ya se copió con strdup**
+        
+        printf("[DEBUG verificarDeclaracionMatriz] Finalizando verificación exitosamente\n");
+        return 1;
     }
 
     // Caso 1: Declaración con lista de elementos
@@ -543,7 +607,8 @@ int verificarDeclaracionMatriz(NodoAST* nodo) {
                    idNodo->valor, numFilas, numColumnas, matriz_str);
         }
     } else {
-        printf("[ERROR] Estructura de nodo no reconocida para declaración de matriz\n");
+        printf("[ERROR] Estructura de nodo no reconocida para declaración de matriz: tipo=%d\n", 
+               tercer_nodo->tipo);
         return 0;
     }
     

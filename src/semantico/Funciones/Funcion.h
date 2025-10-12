@@ -7,4 +7,5 @@
 
 ResultadoEjecucion DeclararFuncion(NodoAST* nodo) ;
 int esTipoVector(const char* tipo);
+int esTipoMatriz(const char* tipo);
 #endif

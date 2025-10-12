@@ -303,6 +303,36 @@ int verificarDeclaracionVector(NodoAST* nodo) {
             //    identificador->valor, simbolo->valor.v.s);
         }
 
+        if (simbolo->clase == SIMBOLO_VECTOR && simbolo->valor.inicializado && simbolo->valor.v.s) {
+            // Calcular y establecer longitud del vector
+            char* vectorStr = strdup(simbolo->valor.v.s);
+            int numElementos = 0;
+            
+            // Remover corchetes
+            if (vectorStr[0] == '[') {
+                memmove(vectorStr, vectorStr + 1, strlen(vectorStr));
+                int len = strlen(vectorStr);
+                if (len > 0 && vectorStr[len - 1] == ']') {
+                    vectorStr[len - 1] = '\0';
+                }
+            }
+            
+            // Contar elementos separados por comas
+            if (strlen(vectorStr) > 0) {
+                char* token = strtok(vectorStr, ",");
+                while (token != NULL) {
+                    numElementos++;
+                    token = strtok(NULL, ",");
+                }
+            }
+            
+            simbolo->longitud = numElementos;
+            free(vectorStr);
+            
+            printf("[DEBUG] Longitud inicial del vector '%s' establecida en %d\n", 
+                simbolo->nombre, simbolo->longitud);
+        }
+
         free(valores);
     } else if (nodo->num_hijos >= 4) {
         // Caso: Declaración con 'new'

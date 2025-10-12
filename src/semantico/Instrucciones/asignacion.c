@@ -124,6 +124,7 @@ int verificarAsignacionSimple(NodoAST* nodo) {
     ValorSimbolo valorEvaluado = evaluarExpr(valor);
     if (valorEvaluado.inicializado) {
         setValorSimbolo(sim, valorEvaluado.tipo, valorEvaluado);
+        sincronizarReferencia(identificador->valor);
         return 1;
     } else {
         nodo->valido = 0;
@@ -186,6 +187,7 @@ int verificarAsignacionCompuesta(NodoAST* nodo) {
         
         // Asignar el resultado al símbolo
         setValorSimbolo(sim, resultado.tipo, resultado);
+        sincronizarReferencia(identificador->valor);
         
         printf("[DEBUG verificarAsignacionCompuesta] Valor asignado exitosamente\n");
         return 1;
