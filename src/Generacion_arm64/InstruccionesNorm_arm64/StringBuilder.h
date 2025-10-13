@@ -19,6 +19,7 @@ typedef struct {
     int contador_strings;  // Para generar nombres únicos
 } GeneradorStringBuilder;
 
+void resetearStringBuilder(); 
 // Funciones principales de StringBuilder
 void inicializarGeneradorStringBuilder(GeneradorStringBuilder* gen, FILE* archivo, 
                                      char* buffer, size_t buffer_size);
@@ -32,6 +33,8 @@ void generarConcatenacionStrings(GeneradorStringBuilder* gen, NodoAST** strings,
 // Generar concatenación desde operación AST (a + b + c)
 void generarConcatenacionDesdeOperacion(GeneradorStringBuilder* gen, NodoAST* operacionNodo);
 
+
+void generarConcatenacionStringBuilder(GeneradorDeclaraciones* gen, const char* nombreVar, NodoAST* operacionNodo);
 // Funciones auxiliares
 void generarFuncionesAuxiliares(GeneradorStringBuilder* gen);
 void generarSeccionesStringBuilder(GeneradorStringBuilder* gen);

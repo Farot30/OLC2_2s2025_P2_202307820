@@ -60,7 +60,8 @@ BACKEND_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/declaracionConst_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Operadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Asignacion_arm64.c \
-	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c
 
 # Fuentes GUI
 GUI_SRC = \
@@ -112,7 +113,8 @@ GUI_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/declaracionConst_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Operadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Asignacion_arm64.c \
-	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c
 
 all: parser gui
 

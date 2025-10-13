@@ -4,28 +4,37 @@
 .extern sprintf
 
 .data
-str0: .asciz "hay: "
-menu: .skip 8
-comida: .asciz "enchilada"
-buffer: .space 100              // Buffer para formatear
-format_str: .asciz "Resultado: %s\n"  // Formato para imprimir
+str2: .asciz "Mundo"
+str1: .asciz "estan"
+str0: .asciz "como"
+c: .skip 8
+b: .skip 8
+a: .asciz "Hola"
+format: .asciz "%s\n"
 
+// constantes
+.section .rodata
+
+// seccion bss
 .bss
     .align 3
     sb_buffer:      .skip 8     // Puntero al buffer
     sb_capacity:    .skip 8     // Capacidad total
     sb_length:      .skip 8     // Longitud actual
 
+
 .text
 _start:
     // Punto de entrada del programa
-    // Operación: L = <expresión>
+    // Operación: b = <expresión>
     // Concatenación de strings usando StringBuilder
-     mov x0, #64
+    mov x0, #64
     bl sb_init
-    adr x0, str0
+    adrp x0, a
+    add x0, x0, :lo12:a
     bl sb_append
-    adr x0, comida
+    adrp x0, str2
+    add x0, x0, :lo12:str2
     bl sb_append
 
     // Obtener resultado final
@@ -51,19 +60,60 @@ _start:
     bl sb_free
 
     // Guardar puntero permanente
-    ldr x1, =menu
+    ldr x1, =b
     str x21, [x1]               // Guardar puntero permanente
 
-    // imprimir resultado
-    ldr x0, =buffer
-    ldr x1, =format_str
-    mov x2, x21                 // string a imprimir
-    bl sprintf
+    ldr x1, =b                  // x0 = dirección de b
+    ldr x1, [x1]                // x0 = puntero al string
+    ldr x0, =format
+    mov x2, x1
+    bl printf                   // printf("%s\n", x0)
 
-    // Llamar a printf
-    ldr x0, =buffer
+    // Operación: c = <expresión>
+    // Concatenación de strings usando StringBuilder
+    mov x0, #64
+    bl sb_init
+    adrp x0, b
+    add x0, x0, :lo12:b
+    ldr x0, [x0]                // Cargar contenido de la variable
+    bl sb_append
+    adrp x0, str0
+    add x0, x0, :lo12:str0
+    bl sb_append
+    adrp x0, str1
+    add x0, x0, :lo12:str1
+    bl sb_append
+
+    // Obtener resultado final
+    bl sb_get_string
+    mov x19, x0                 // x19 tiene el string concatenado
+
+    // Calcular longitud del string
+    mov x0, x19
+    bl strlen
+    add x0, x0, #1              // +1 para null terminator
+    mov x20, x0                 // x20 = longitud
+
+    // Reservar memoria permanente
+    bl sb_malloc
+    mov x21, x0                 // x21 = nueva memoria
+
+    // Copiar string a memoria permanente
+    mov x0, x21                 // destino
+    mov x1, x19                 // origen
+    bl strcpy
+
+    // Limpiar StringBuilder
+    bl sb_free
+
+    // Guardar puntero permanente
+    ldr x1, =c
+    str x21, [x1]               // Guardar puntero permanente
+
+    ldr x0, =format
+    ldr x1, =c
+    ldr x1, [x1]
     bl printf
-
     // Salida del programa por defecto
     mov x0, #0
     mov x8, #93
@@ -245,3 +295,4 @@ strcpy_loop:
     b strcpy_loop
 strcpy_end:
     ret
+

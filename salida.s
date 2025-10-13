@@ -5,9 +5,12 @@
 
 // declaraciones de variables
 .data
-str0: .asciz "hay: "
-menu: .skip 8
-comida: .asciz "enchilada"
+str2: .asciz "Mundo"
+str1: .asciz "estan"
+str0: .asciz "como"
+c: .skip 8
+b: .skip 8
+a: .asciz "Hola"
 
 // constantes
 .section .rodata
@@ -25,13 +28,15 @@ comida: .asciz "enchilada"
 
 _start:
     // Punto de entrada del programa
-    // Operación: menu = <expresión>
+    // Operación: b = <expresión>
     // Concatenación de strings usando StringBuilder
     mov x0, #64
     bl sb_init
-    adr x0, str0
+    adrp x0, a
+    add x0, x0, :lo12:a
     bl sb_append
-    adr x0, comida
+    adrp x0, str2
+    add x0, x0, :lo12:str2
     bl sb_append
 
     // Obtener resultado final
@@ -57,7 +62,47 @@ _start:
     bl sb_free
 
     // Guardar puntero permanente
-    ldr x1, =menu
+    ldr x1, =b
+    str x21, [x1]               // Guardar puntero permanente
+    // Operación: c = <expresión>
+    // Concatenación de strings usando StringBuilder
+    mov x0, #64
+    bl sb_init
+    adrp x0, b
+    add x0, x0, :lo12:b
+    ldr x0, [x0]                // Cargar contenido de la variable
+    bl sb_append
+    adrp x0, str0
+    add x0, x0, :lo12:str0
+    bl sb_append
+    adrp x0, str1
+    add x0, x0, :lo12:str1
+    bl sb_append
+
+    // Obtener resultado final
+    bl sb_get_string
+    mov x19, x0                 // x19 tiene el string concatenado
+
+    // Calcular longitud del string
+    mov x0, x19
+    bl strlen
+    add x0, x0, #1              // +1 para null terminator
+    mov x20, x0                 // x20 = longitud
+
+    // Reservar memoria permanente
+    bl sb_malloc
+    mov x21, x0                 // x21 = nueva memoria
+
+    // Copiar string a memoria permanente
+    mov x0, x21                 // destino
+    mov x1, x19                 // origen
+    bl strcpy
+
+    // Limpiar StringBuilder
+    bl sb_free
+
+    // Guardar puntero permanente
+    ldr x1, =c
     str x21, [x1]               // Guardar puntero permanente
     // Salida del programa por defecto
     mov x0, #0

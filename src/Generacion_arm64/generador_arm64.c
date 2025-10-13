@@ -2,7 +2,9 @@
 #include "registros_arm64.h"
 #include "InstruccionesNorm_arm64/declaraciones_arm64.h"
 #include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
+#include "InstruccionesNorm_arm64/Operadores_arm64.h"
 #include "InstruccionesNorm_arm64/Asignacion_arm64.h"
+#include "InstruccionesNorm_arm64/StringBuilder.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,10 +14,90 @@ typedef struct CodigoCarga {
     struct CodigoCarga* siguiente;
 } CodigoCarga;
 
+typedef struct OperacionPendiente {
+    char* nombreVariable;
+    NodoAST* operacionNodo;
+    TipoDato tipo;
+    bool esDeclaracion;
+    struct OperacionPendiente* siguiente;
+} OperacionPendiente;
+
+static OperacionPendiente* operaciones_pendientes = NULL;
+
 static FILE* archivoSalida = NULL;
 static char* bufferCodigo = NULL;
 static size_t bufferTamanio = 0;
 static GeneradorARM64 generador_principal;
+
+void agregarOperacionPendiente(const char* nombreVar, NodoAST* operacion, TipoDato tipo, bool esDeclaracion) {
+    OperacionPendiente* nueva = malloc(sizeof(OperacionPendiente));
+    nueva->nombreVariable = strdup(nombreVar);
+    nueva->operacionNodo = operacion;
+    nueva->tipo = tipo;
+    nueva->esDeclaracion = esDeclaracion;
+    nueva->siguiente = operaciones_pendientes;
+    operaciones_pendientes = nueva;
+    
+    printf("[DEBUG] Operación pendiente agregada: %s (tipo: %d)\n", nombreVar, tipo);
+}
+
+// **FUNCIÓN PARA PROCESAR OPERACIONES EN ORDEN CORRECTO**
+void procesarOperacionesPendientes(GeneradorARM64* gen) {
+    // Contar operaciones para procesar en orden inverso
+    int count = 0;
+    OperacionPendiente* temp = operaciones_pendientes;
+    while (temp) {
+        count++;
+        temp = temp->siguiente;
+    }
+    
+    // Crear array para procesar en orden correcto
+    OperacionPendiente** array = malloc(count * sizeof(OperacionPendiente*));
+    temp = operaciones_pendientes;
+    for (int i = 0; i < count; i++) {
+        array[i] = temp;
+        temp = temp->siguiente;
+    }
+    
+    // Procesar desde el último hacia el primero (orden correcto de dependencias)
+    for (int i = 0; i < count; i++) {
+        OperacionPendiente* op = array[i];
+        printf("[DEBUG] Procesando operación para variable: %s\n", op->nombreVariable);
+        
+        if (op->esDeclaracion) {
+            generarCodigoOperacionARM64(&gen->gen_declaraciones, op->nombreVariable, op->operacionNodo, op->tipo);
+        } else {
+            // Para asignaciones futuras
+            generarCodigoOperacionARM64(&gen->gen_declaraciones, op->nombreVariable, op->operacionNodo, op->tipo);
+        }
+    }
+    
+    // Limpiar memoria
+    free(array);
+    while (operaciones_pendientes) {
+        OperacionPendiente* temp = operaciones_pendientes;
+        operaciones_pendientes = operaciones_pendientes->siguiente;
+        free(temp->nombreVariable);
+        free(temp);
+    }
+}
+
+// **FUNCIÓN PARA VERIFICAR SI UNA VARIABLE DEPENDE DE OTRA**
+bool verificarDependencia(NodoAST* nodo, const char* variable) {
+    if (!nodo || !variable) return false;
+    
+    if (nodo->tipo == AST_IDENTIFICADOR && strcmp(nodo->valor, variable) == 0) {
+        return true;
+    }
+    
+    for (int i = 0; i < nodo->num_hijos; i++) {
+        if (verificarDependencia(nodo->hijos[i], variable)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     // Abrir archivo
@@ -76,8 +158,12 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
 }
 
 void finalizarGeneradorARM64(GeneradorARM64* gen) {
+    // **PROCESAR OPERACIONES PENDIENTES ANTES DE ESCRIBIR AL ARCHIVO**
+    printf("[DEBUG] Procesando operaciones pendientes antes de finalizar...\n");
+    procesarOperacionesPendientes(gen);
+    
+    // **AHORA SÍ ESCRIBIR TODO AL ARCHIVO**
     if (gen->archivo && gen->buffer_codigo) {
-        // **ESCRIBIR TODO EL BUFFER AL ARCHIVO AL FINAL**
         fprintf(gen->archivo, "%s", gen->buffer_codigo);
         fflush(gen->archivo);
         fclose(gen->archivo);
@@ -85,6 +171,7 @@ void finalizarGeneradorARM64(GeneradorARM64* gen) {
         printf("[DEBUG] Código ARM64 escrito al archivo\n");
     }
 }
+
 bool seccion_data_iniciada = false;
 bool seccion_bss_iniciada = false;
 
@@ -93,11 +180,37 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
 
     switch (nodo->tipo) {
         case AST_DECLARACION:
-            // NO generar secciones aquí, solo la declaración
             printf("[DEBUG] Nodo de declaración detectado\n");
             
-            generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
-
+            if (nodo->num_hijos >= 2) {
+                NodoAST* tipoNodo = nodo->hijos[0];
+                NodoAST* idNodo = nodo->hijos[1];
+                NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL;
+                
+                const char* nombreVariable = idNodo->valor;
+                const char* tipoVariable = tipoNodo->valor;
+                TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
+                
+                // **SI TIENE OPERACIÓN, GENERAR DECLARACIÓN Y AGREGAR A PENDIENTES**
+                if (valorNodo && valorNodo->tipo == AST_OPERACION) {
+                    printf("[DEBUG] Agregando operación pendiente para: %s\n", nombreVariable);
+                    
+                    // **GENERAR LA DECLARACIÓN CON .skip 8 INMEDIATAMENTE**
+                    char decl[64];
+                    if (tipo == TIPO_STRING) {
+                        snprintf(decl, sizeof(decl), "%s: .skip 8\n", nombreVariable);
+                    } else {
+                        snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable);
+                    }
+                    insertarEnSeccionData(&gen->gen_declaraciones, decl);
+                    
+                    // **AGREGAR LA OPERACIÓN A PENDIENTES**
+                    agregarOperacionPendiente(nombreVariable, valorNodo, tipo, true);
+                } else {
+                    // Declaración simple, generar inmediatamente
+                    generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
+                }
+            }
             break;
             
         case AST_DECLARACION_CONST:
@@ -115,15 +228,6 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             generarAsignacionCompuestaARM64(&generador_principal.gen_declaraciones, nodo);
             break;
 
-        case AST_OPERACION:
-            printf("[DEBUG] Nodo de operación detectado en ARM64\n");
-            // Solo generar si es una operación independiente (no parte de una declaración/asignación)
-            // Esto generalmente no debería ocurrir, pero si sucede, procesamos los hijos
-            for (int i = 0; i < nodo->num_hijos; i++) {
-                procesarNodoAST_ARM64(gen, nodo->hijos[i]);
-            }
-            break;
-
         default:
             // Procesar hijos recursivamente
             for (int i = 0; i < nodo->num_hijos; i++) {
@@ -135,6 +239,7 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
 
 // Funciones compatibles con la interfaz anterior
 void iniciarArchivoARM64(const char* nombreArchivo) {
+    resetearStringBuilder(); 
     inicializarGeneradorARM64(&generador_principal, nombreArchivo);
     
     // Mantener compatibilidad con variables estáticas

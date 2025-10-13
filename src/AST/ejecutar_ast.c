@@ -631,7 +631,7 @@ void interpretarPrograma(NodoAST* raiz) {
     }
 
     iniciarArchivoARM64("salida.s");
-/*
+
     contadorBloques = 0;
     dentroDelMain = 0;
     bloquePrincipalMain = 0;
@@ -641,10 +641,11 @@ void interpretarPrograma(NodoAST* raiz) {
     printf("\n[DEBUG] === INICIANDO INTERPRETACIÓN SECUENCIAL ===\n");
     printf("[DEBUG] Ámbito inicial: %s\n", ambitoActual());
 
-*/
     ejecutarNodoAST(raiz);
 
     salirAmbito();
+
+    finalizarArchivoARM64();
 
     const char* codigoGenerado = obtenerCodigoGenerado();
     if (codigoGenerado) {
@@ -652,8 +653,6 @@ void interpretarPrograma(NodoAST* raiz) {
     } else {
         printf("[ERROR] No se generó código ARM64\n");
     }
-
-    finalizarArchivoARM64();
     
     //printf("\n[DEBUG] === INTERPRETACIÓN COMPLETADA ===\n");
     mostrarTablaSimbolos();

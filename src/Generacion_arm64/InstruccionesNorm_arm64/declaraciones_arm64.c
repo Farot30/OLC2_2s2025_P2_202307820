@@ -1,11 +1,12 @@
 #include "declaraciones_arm64.h"
 #include "declaracionConst_arm64.h"
 #include "Operadores_arm64.h"
+#include "Evaluadores_arm64.h"
 #include "../../semantico/tipos.h"
 #include "../../semantico/semantico.h"
+#include "../../AST/ast.h"
 #include <string.h>
 #include <stdlib.h>
-
 void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archivo, 
                                       char* buffer, size_t buffer_size,
                                       AdministradorRegistros* admin) {
@@ -176,6 +177,7 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         return;
     }
 
+
     const char* nombreVariable = idNodo->valor;
     const char* tipoVariable = tipoNodo->valor;
     TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
@@ -183,6 +185,19 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
     char valorStr[64] = "0";
     bool inicializado = false;
     bool es_operacion = false;
+
+    if (valorNodo && (valorNodo->tipo == AST_OPERACION || valorNodo->tipo == AST_EQUAL) && strcmp(valorNodo->valor, ".equals") == 0) {
+        char decl[64];
+        snprintf(decl, sizeof(decl), "%s: .byte 0\n", nombreVariable);
+        insertarEnSeccionData(gen, decl);
+
+        const char* nombreVarResultado = nombreVariable;
+        const char* nombreStr1 = valorNodo->hijos[0]->valor;
+        const char* nombreStr2 = valorNodo->hijos[1]->valor;
+
+        generarCodigoEqualsCompleto(gen, nombreVarResultado, nombreStr1, nombreStr2);
+        return;
+    }
 
     if (valorNodo) {
         // **DETECTAR SI ES UNA OPERACIÓN**
@@ -240,6 +255,22 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         } else {
             tipoDeclaracion = "asciz";
         }
+    }
+
+    if (inicializado && es_operacion) {
+        // Generar solo la declaración con .skip 8 para strings
+        if (tipo == TIPO_STRING) {
+            if (es_operacion) {
+                snprintf(codigo, sizeof(codigo), "%s: .skip 8\n", nombreVariable);
+            } else {
+                snprintf(codigo, sizeof(codigo), "%s: .asciz \"%s\"\n", nombreVariable, valorStr);
+            }
+        } else {
+            snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+        }
+        insertarEnSeccionData(gen, codigo);
+        // **NO GENERAR LA OPERACIÓN AQUÍ - SE HACE DESPUÉS**
+        return;
     }
 
     if (inicializado) {

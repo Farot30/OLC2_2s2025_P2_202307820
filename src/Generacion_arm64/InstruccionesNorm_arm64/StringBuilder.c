@@ -2,6 +2,95 @@
 #include <string.h>
 #include <stdlib.h>
 
+static void procesarNodosConcatenacion(NodoAST* nodo, GeneradorDeclaraciones* gen, GeneradorStringBuilder* sb_gen, char* codigoOperacion);
+static int contador_global_strings = 0;
+static bool sb_secciones_generadas = false;
+static bool sb_funciones_generadas = false;
+
+// **FUNCIÓN PARA GENERAR NOMBRE ÚNICO DE STRING**
+static char* generarNombreStringUnico() {
+    static char nombre[32];
+    snprintf(nombre, sizeof(nombre), "str%d", contador_global_strings++);
+    return nombre;
+}
+
+// **FUNCIÓN PARA VERIFICAR SI UNA VARIABLE YA EXISTE EN .data**
+static bool variableExisteEnData(GeneradorStringBuilder* gen, const char* valor) {
+    if (!gen->buffer || !valor) return false;
+    
+    char patron[256];
+    // Buscar el patrón ": .asciz valor" en el buffer
+    snprintf(patron, sizeof(patron), ".asciz %s", valor);
+    return strstr(gen->buffer, patron) != NULL;
+}
+
+// **FUNCIÓN PARA OBTENER NOMBRE DE VARIABLE EXISTENTE**
+static char* obtenerNombreVariableExistente(GeneradorStringBuilder* gen, const char* valor) {
+    if (!gen->buffer || !valor) return NULL;
+    
+    static char nombre[32];
+    char patron[256];
+    snprintf(patron, sizeof(patron), ".asciz %s", valor);
+    
+    char* pos = strstr(gen->buffer, patron);
+    if (pos) {
+        // Buscar hacia atrás para encontrar el nombre de la variable
+        char* inicio = pos;
+        while (inicio > gen->buffer && *inicio != '\n') {
+            inicio--;
+        }
+        if (*inicio == '\n') inicio++; // Saltar el \n
+        
+        // Extraer el nombre hasta el ':'
+        char* fin = strchr(inicio, ':');
+        if (fin) {
+            int len = fin - inicio;
+            if (len < 32) {
+                strncpy(nombre, inicio, len);
+                nombre[len] = '\0';
+                return nombre;
+            }
+        }
+    }
+    return NULL;
+}
+
+static bool esVariableAsciz(GeneradorDeclaraciones* gen, const char* nombreVar) {
+    if (!gen->buffer || !nombreVar) return false;
+    
+    // Buscar la declaración exacta de la variable
+    char patron[128];
+    snprintf(patron, sizeof(patron), "%s:", nombreVar);
+    
+    char* pos = strstr(gen->buffer, patron);
+    if (pos) {
+        // Verificar que sea el inicio de una línea (o después de \n)
+        if (pos != gen->buffer && *(pos - 1) != '\n') {
+            // Buscar la siguiente ocurrencia
+            pos = strstr(pos + 1, patron);
+        }
+        
+        if (pos) {
+            // Buscar el tipo de declaración en la misma línea
+            char* finLinea = strchr(pos, '\n');
+            if (finLinea) {
+                // Crear una subcadena de solo esa línea
+                size_t longLinea = finLinea - pos;
+                char linea[256];
+                strncpy(linea, pos, longLinea);
+                linea[longLinea] = '\0';
+                
+                // Verificar si contiene .asciz
+                if (strstr(linea, ".asciz")) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
 // Función auxiliar para procesar nodos de string (movida fuera)
 static void procesarNodoString(NodoAST* nodo, GeneradorStringBuilder* gen, char* codigo) {
     if (!nodo) return;
@@ -63,6 +152,154 @@ static void procesarNodoString(NodoAST* nodo, GeneradorStringBuilder* gen, char*
     }
 }
 
+static void procesarNodosConcatenacion(NodoAST* nodo, GeneradorDeclaraciones* gen, GeneradorStringBuilder* sb_gen, char* codigoOperacion) {
+    if (!nodo) return;
+
+    if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "+") == 0) {
+        if (nodo->num_hijos >= 2) {
+            procesarNodosConcatenacion(nodo->hijos[0], gen, sb_gen, codigoOperacion);
+            procesarNodosConcatenacion(nodo->hijos[1], gen, sb_gen, codigoOperacion);
+        }
+    } else if (nodo->tipo == AST_CADENA || nodo->tipo == AST_IDENTIFICADOR) {
+        char buffer[256];
+        if (nodo->tipo == AST_CADENA) {
+            char* nombreStr = NULL;
+            
+            if (variableExisteEnData(sb_gen, nodo->valor)) {
+                nombreStr = obtenerNombreVariableExistente(sb_gen, nodo->valor);
+                printf("[DEBUG] Reutilizando string existente: %s para valor %s\n", nombreStr, nodo->valor);
+            } else {
+                nombreStr = generarNombreStringUnico();
+                printf("[DEBUG] Creando nuevo string: %s para valor %s\n", nombreStr, nodo->valor);
+                
+                char declaracionStr[128];
+                if (nodo->valor[0] == '"' && nodo->valor[strlen(nodo->valor) - 1] == '"') {
+                    snprintf(declaracionStr, sizeof(declaracionStr), "%s: .asciz %s\n", nombreStr, nodo->valor);
+                } else {
+                    snprintf(declaracionStr, sizeof(declaracionStr), "%s: .asciz \"%s\"\n", nombreStr, nodo->valor);
+                }
+
+                const char* data_marker = ".data\n";
+                char* pos = strstr(gen->buffer, data_marker);
+                if (pos) {
+                    pos += strlen(data_marker);
+                    size_t offset = pos - gen->buffer;
+                    size_t len_actual = strlen(gen->buffer);
+                    size_t len_decl = strlen(declaracionStr);
+
+                    if (len_actual + len_decl + 1 >= gen->buffer_size) {
+                        gen->buffer_size = len_actual + len_decl + 1024;
+                        gen->buffer = realloc(gen->buffer, gen->buffer_size);
+                    }
+
+                    memmove(gen->buffer + offset + len_decl, gen->buffer + offset, len_actual - offset + 1);
+                    memcpy(gen->buffer + offset, declaracionStr, len_decl);
+                }
+            }
+
+            snprintf(buffer, sizeof(buffer), 
+                "    adrp x0, %s\n"
+                "    add x0, x0, :lo12:%s\n"
+                "    bl sb_append\n", nombreStr, nombreStr);
+        } else {
+            // **USAR LA NUEVA FUNCIÓN MEJORADA**
+            bool esAsciz = esVariableAsciz(gen, nodo->valor);
+            
+            printf("[DEBUG] Variable '%s' detectada como: %s\n", nodo->valor, esAsciz ? ".asciz" : ".skip");
+            printf("[DEBUG] Buffer contiene para '%s':\n", nodo->valor);
+            char* debug_pos = strstr(gen->buffer, nodo->valor);
+            if (debug_pos) {
+                // Mostrar contexto
+                char contexto[200];
+                strncpy(contexto, debug_pos, 199);
+                contexto[199] = '\0';
+                printf("[DEBUG] Contexto: %s\n", contexto);
+            }
+            
+            if (esAsciz) {
+                // Es string literal (.asciz)
+                snprintf(buffer, sizeof(buffer),
+                    "    adrp x0, %s\n"
+                    "    add x0, x0, :lo12:%s\n"
+                    "    bl sb_append\n", nodo->valor, nodo->valor);
+            } else {
+                // Es puntero (.skip 8)
+                snprintf(buffer, sizeof(buffer),
+                    "    adrp x0, %s\n"
+                    "    add x0, x0, :lo12:%s\n"
+                    "    ldr x0, [x0]                // Cargar contenido de la variable\n"
+                    "    bl sb_append\n", nodo->valor, nodo->valor);
+            }
+        }
+        strcat(codigoOperacion, buffer);
+    }
+}
+
+void generarConcatenacionStringBuilder(GeneradorDeclaraciones* gen, const char* nombreVar, NodoAST* operacionNodo) {
+    if (!gen || !nombreVar || !operacionNodo) return;
+    
+    printf("[DEBUG] Generando concatenación StringBuilder para variable '%s'\n", nombreVar);
+    
+    // Crear un generador de StringBuilder
+    GeneradorStringBuilder sb_gen;
+    inicializarGeneradorStringBuilder(&sb_gen, gen->archivo, gen->buffer, gen->buffer_size);
+
+    // Generar infraestructura del StringBuilder
+    generarInfraestructuraStringBuilder(&sb_gen);
+
+    char codigoOperacion[2048] = "";
+    char buffer[256];
+
+    // Comentario inicial
+    snprintf(buffer, sizeof(buffer), "    // Operación: %s = <expresión>\n", nombreVar);
+    strcat(codigoOperacion, buffer);
+
+    // Código para inicializar el StringBuilder
+    strcat(codigoOperacion, "    // Concatenación de strings usando StringBuilder\n");
+    strcat(codigoOperacion, "    mov x0, #64\n");  // Capacidad inicial
+    strcat(codigoOperacion, "    bl sb_init\n");
+
+    // **FUNCIÓN AUXILIAR MEJORADA PARA PROCESAR NODOS**
+    procesarNodosConcatenacion(operacionNodo, gen, &sb_gen, codigoOperacion);
+
+    // **OBTENER EL RESULTADO ANTES DE LIBERAR**
+    strcat(codigoOperacion, "\n    // Obtener resultado final\n");
+    strcat(codigoOperacion, "    bl sb_get_string\n");
+    strcat(codigoOperacion, "    mov x19, x0                 // x19 tiene el string concatenado\n");
+
+    // **RESERVAR MEMORIA PERMANENTE PARA LA COPIA**
+    strcat(codigoOperacion, "\n    // Calcular longitud del string\n");
+    strcat(codigoOperacion, "    mov x0, x19\n");
+    strcat(codigoOperacion, "    bl strlen\n");
+    strcat(codigoOperacion, "    add x0, x0, #1              // +1 para null terminator\n");
+    strcat(codigoOperacion, "    mov x20, x0                 // x20 = longitud\n");
+    
+    // **RESERVAR MEMORIA PERMANENTE**
+    strcat(codigoOperacion, "\n    // Reservar memoria permanente\n");
+    strcat(codigoOperacion, "    bl sb_malloc\n");
+    strcat(codigoOperacion, "    mov x21, x0                 // x21 = nueva memoria\n");
+    
+    // **COPIAR EL STRING A LA NUEVA MEMORIA**
+    strcat(codigoOperacion, "\n    // Copiar string a memoria permanente\n");
+    strcat(codigoOperacion, "    mov x0, x21                 // destino\n");
+    strcat(codigoOperacion, "    mov x1, x19                 // origen\n");
+    strcat(codigoOperacion, "    bl strcpy\n");
+
+    // **AHORA SÍ LIBERAR EL STRINGBUILDER**
+    strcat(codigoOperacion, "\n    // Limpiar StringBuilder\n");
+    strcat(codigoOperacion, "    bl sb_free\n");
+    
+    // **GUARDAR EL PUNTERO PERMANENTE EN LA VARIABLE**
+    strcat(codigoOperacion, "\n    // Guardar puntero permanente\n");
+    snprintf(buffer, sizeof(buffer),
+        "    ldr x1, =%s\n"
+        "    str x21, [x1]               // Guardar puntero permanente\n", nombreVar);
+    strcat(codigoOperacion, buffer);
+
+    // Insertar el código generado en la sección .text
+    insertarEnSeccionText(gen, codigoOperacion);
+}
+
 void inicializarGeneradorStringBuilder(GeneradorStringBuilder* gen, FILE* archivo, 
                                      char* buffer, size_t buffer_size) {
     gen->archivo = archivo;
@@ -72,7 +309,7 @@ void inicializarGeneradorStringBuilder(GeneradorStringBuilder* gen, FILE* archiv
     gen->seccion_bss_creada = false;
     gen->seccion_text_creada = false;
     gen->funciones_generadas = false;
-    gen->contador_strings = 0;
+    gen->contador_strings = contador_global_strings; // Usar contador global
 }
 
 void insertarEnSeccionTextStringBuilder(GeneradorStringBuilder* gen, const char* codigo) {
@@ -120,7 +357,8 @@ void insertarEnSeccionTextStringBuilder(GeneradorStringBuilder* gen, const char*
 }
 
 void generarSeccionesStringBuilder(GeneradorStringBuilder* gen) {
-    if (gen->seccion_bss_creada) return;
+    // **SOLO GENERAR UNA VEZ USANDO BANDERA GLOBAL**
+    if (sb_secciones_generadas) return;
     
     const char* secciones_sb = 
         "    .align 3\n"
@@ -148,11 +386,12 @@ void generarSeccionesStringBuilder(GeneradorStringBuilder* gen) {
         memcpy(gen->buffer + offset, secciones_sb, len_codigo);
     }
     
+    sb_secciones_generadas = true; // **MARCAR COMO GENERADO**
     gen->seccion_bss_creada = true;
 }
 
 void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
-    if (gen->funciones_generadas) return;
+    if (sb_funciones_generadas) return;
     
     const char* funciones_auxiliares = 
         "\n// ============================================\n"
@@ -328,12 +567,18 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         strcat(gen->buffer, funciones_auxiliares);
     }
     
+    sb_funciones_generadas = true;
     gen->funciones_generadas = true;
 }
 
 void generarInfraestructuraStringBuilder(GeneradorStringBuilder* gen) {
     generarSeccionesStringBuilder(gen);
     generarFuncionesAuxiliares(gen);
+}
+void resetearStringBuilder() {
+    contador_global_strings = 0;
+    sb_secciones_generadas = false;
+    sb_funciones_generadas = false;
 }
 
 void generarConcatenacionDesdeOperacion(GeneradorStringBuilder* gen, NodoAST* operacionNodo) {
