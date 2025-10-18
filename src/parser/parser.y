@@ -1429,7 +1429,6 @@ instruccion_return:
 /* ========== CONTROL DE FLUJOS ========== */
 instruccion_if:
     TOKEN_IF TOKEN_PARIZQ expresion TOKEN_PARDER bloque %prec TOKEN_IF {
-        printf("[DEBUG] Procesando if en línea %d, columna %d\n", @1.first_line, @1.first_column);
         $$ = crearNodo(AST_IF, "if");
         $$->linea = @1.first_line; $$->columna = @1.first_column;
         agregarHijo($$, $3);   // condición
@@ -1490,7 +1489,7 @@ lista_casos:
         $$ = crearNodo(AST_LISTA, "Casos");
         agregarHijo($$, $1);
     }
-    ;
+;
 
 caso: 
     TOKEN_CASE expresion TOKEN_DOS_PUNTOS lista_sentencias TOKEN_BREAK TOKEN_PUNTOCOMA{
@@ -1598,6 +1597,9 @@ instruccion_for:
 
 NodoAST* crear_asignacion_compuesta(char* id, char* operador, NodoAST* expr, 
                                   int id_linea, int id_columna, int op_linea, int op_columna) {
+    (void)op_linea;
+    (void)op_columna;
+        
     NodoAST* asig = crearNodo(AST_ASIGNACION_COMPUESTA, operador); // <--- Cambia aquí
     asig->linea = id_linea;
     asig->columna = id_columna;

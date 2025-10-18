@@ -1,16 +1,19 @@
 // Código ARM64 generado por JavaLang Compiler
 .global _start
 .extern itoa
+.extern printf
 
 
 // declaraciones de variables
 .data
-str2: .asciz "Mundo"
-str1: .asciz "estan"
-str0: .asciz "como"
-c: .skip 8
-b: .skip 8
-a: .asciz "Hola"
+format_string_1: .asciz "%s\n"
+format_string_0: .asciz "%s\n"
+str2: .asciz "panqueues "
+peque: .skip 8
+pan: .asciz "nose "
+str1: .asciz "macaco "
+str0: .asciz "chetos "
+hola: .skip 8
 
 // constantes
 .section .rodata
@@ -28,15 +31,13 @@ a: .asciz "Hola"
 
 _start:
     // Punto de entrada del programa
-    // Operación: b = <expresión>
+    // Operación: hola = <expresión>
     // Concatenación de strings usando StringBuilder
     mov x0, #64
     bl sb_init
-    adrp x0, a
-    add x0, x0, :lo12:a
+    ldr x0, =str0
     bl sb_append
-    adrp x0, str2
-    add x0, x0, :lo12:str2
+    ldr x0, =str1
     bl sb_append
 
     // Obtener resultado final
@@ -62,21 +63,18 @@ _start:
     bl sb_free
 
     // Guardar puntero permanente
-    ldr x1, =b
+    ldr x1, =hola
     str x21, [x1]               // Guardar puntero permanente
-    // Operación: c = <expresión>
+    // Operación: peque = <expresión>
     // Concatenación de strings usando StringBuilder
     mov x0, #64
     bl sb_init
-    adrp x0, b
-    add x0, x0, :lo12:b
-    ldr x0, [x0]                // Cargar contenido de la variable
+    ldr x0, =hola
+    ldr x0, [x0]
     bl sb_append
-    adrp x0, str0
-    add x0, x0, :lo12:str0
+    ldr x0, =str2
     bl sb_append
-    adrp x0, str1
-    add x0, x0, :lo12:str1
+    ldr x0, =pan
     bl sb_append
 
     // Obtener resultado final
@@ -102,8 +100,15 @@ _start:
     bl sb_free
 
     // Guardar puntero permanente
-    ldr x1, =c
+    ldr x1, =peque
     str x21, [x1]               // Guardar puntero permanente
+    ldr x1, =peque
+    ldr x1, [x1]
+    ldr x0, =format_string_0
+    bl printf
+    ldr x1, =pan
+    ldr x0, =format_string_1
+    bl printf
     // Salida del programa por defecto
     mov x0, #0
     mov x8, #93
@@ -120,19 +125,19 @@ sb_init:
     
     // Reservar memoria
     bl sb_malloc
-    adr x1, sb_buffer
+    ldr x1, =sb_buffer
     str x0, [x1]
     
     // Guardar capacidad
-    adr x1, sb_capacity
+    ldr x1, =sb_capacity
     str x19, [x1]
     
     // Longitud inicial = 0
-    adr x1, sb_length
+    ldr x1, =sb_length
     str xzr, [x1]
     
     // Poner null terminator
-    adr x1, sb_buffer
+    ldr x1, =sb_buffer
     ldr x1, [x1]
     strb wzr, [x1]
     
@@ -152,12 +157,12 @@ sb_append:
     mov x20, x0                 // x20 = longitud a agregar
     
     // Verificar si necesitamos expandir
-    adr x0, sb_length
+    ldr x0, =sb_length
     ldr x0, [x0]
     add x0, x0, x20             // longitud_total = actual + nueva
     add x0, x0, #1              // +1 para null
     
-    adr x1, sb_capacity
+    ldr x1, =sb_capacity
     ldr x1, [x1]
     cmp x0, x1
     ble sb_append_copy          // si cabe, copiar
@@ -168,9 +173,9 @@ sb_append:
     
 sb_append_copy:
     // Copiar string al final
-    adr x0, sb_buffer
+    ldr x0, =sb_buffer
     ldr x0, [x0]
-    adr x1, sb_length
+    ldr x1, =sb_length
     ldr x1, [x1]
     add x0, x0, x1              // posición final
     
@@ -178,7 +183,7 @@ sb_append_copy:
     bl strcpy
     
     // Actualizar longitud
-    adr x0, sb_length
+    ldr x0, =sb_length
     ldr x1, [x0]
     add x1, x1, x20
     str x1, [x0]
@@ -203,21 +208,21 @@ sb_resize:
     
     // Copiar contenido antiguo
     mov x0, x20
-    adr x1, sb_buffer
+    ldr x1, =sb_buffer
     ldr x1, [x1]
     bl strcpy
     
     // Liberar buffer antiguo
-    adr x0, sb_buffer
+    ldr x0, =sb_buffer
     ldr x0, [x0]
-    adr x1, sb_capacity
+    ldr x1, =sb_capacity
     ldr x1, [x1]
     bl sb_free_buffer
     
     // Actualizar puntero y capacidad
-    adr x0, sb_buffer
+    ldr x0, =sb_buffer
     str x20, [x0]
-    adr x0, sb_capacity
+    ldr x0, =sb_capacity
     str x19, [x0]
     
     ldr x20, [sp, #24]
@@ -227,7 +232,7 @@ sb_resize:
 
 // Obtener string final
 sb_get_string:
-    adr x0, sb_buffer
+    ldr x0, =sb_buffer
     ldr x0, [x0]
     ret
 
@@ -235,9 +240,9 @@ sb_get_string:
 sb_free:
     stp x29, x30, [sp, #-16]!
     
-    adr x0, sb_buffer
+    ldr x0, =sb_buffer
     ldr x0, [x0]
-    adr x1, sb_capacity
+    ldr x1, =sb_capacity
     ldr x1, [x1]
     bl sb_free_buffer
     

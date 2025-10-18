@@ -10,24 +10,7 @@
 
 extern void capture_print_output(const char* text);
 
-static void procesarSecuenciasEscape(const char* src, char* dst, size_t max) {
-    size_t j = 0;
-    for (size_t i = 0; src && src[i] && j + 1 < max; ++i) {
-        if (src[i] == '\\' && src[i+1]) {
-            switch (src[i+1]) {
-                case 'n': dst[j++] = '\n'; i++; break;
-                case 'r': dst[j++] = '\n'; i++; break; // Unificar \r como salto de línea
-                case 't': dst[j++] = '\t'; i++; break;
-                case '\\': dst[j++] = '\\'; i++; break;
-                case '"': dst[j++] = '"'; i++; break;
-                default: dst[j++] = src[i]; break;
-            }
-        } else {
-            dst[j++] = src[i];
-        }
-    }
-    dst[j] = 0;
-}
+
 void printUnicode(int codepoint) {
     if (codepoint <= 0x7F)
         printf("%c", codepoint);
@@ -44,38 +27,7 @@ void printUnicode(int codepoint) {
         printf("\\u%04X", codepoint); // fuera de BMP
 }
 
-void imprimirTexto(const char* mensaje){
-    if (mensaje) {
-        char procesada[1024];
-        procesarSecuenciasEscape(mensaje, procesada, sizeof(procesada));
-        printf("%s", procesada);
-        capture_print_output(procesada);
-    }
-}
 
-void imprimirValor(TipoDato tipo, const char* literal){
-    if(!literal){ 
-        printf("null");
-        capture_print_output("null");
-        return; 
-    }
-    char procesada[256];
-    procesarSecuenciasEscape(literal, procesada, sizeof(procesada));
-    switch(tipo){
-        case TIPO_STRING: 
-            printf("\"%s\"", procesada);
-            capture_print_output(procesada);
-            break;
-        case TIPO_CHAR:   
-            printf("'%s'", procesada);
-            capture_print_output(procesada);
-            break;
-        default:          
-            printf("%s", procesada);
-            capture_print_output(procesada);
-            break;
-    }
-}
 
 void imprimirEvaluado(NodoAST* expr) {
     printf("[DEBUG] imprimirEvaluado() expr tipo: %d, valor: '%s', num_hijos: %d\n",
@@ -90,6 +42,12 @@ void imprimirEvaluado(NodoAST* expr) {
     }
     
     if (!expr) {
+        printf("\n");
+        capture_print_output("\n");
+        return;
+    }
+
+    if (expr->tipo == AST_CADENA && (!expr->valor || strlen(expr->valor) == 0)) {
         printf("\n");
         capture_print_output("\n");
         return;

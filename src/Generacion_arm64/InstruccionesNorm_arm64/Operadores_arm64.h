@@ -8,7 +8,7 @@
 #include "StringBuilder.h"
 #include <stdio.h>
 
-
+void generarCodigoRecursivoBoolean(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
 void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombreVar, NodoAST* operacionNodo, TipoDato tipoVar);
 
 // Función recursiva para sumas/restas/multis/divisiones de enteros

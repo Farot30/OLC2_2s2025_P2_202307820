@@ -61,7 +61,15 @@ BACKEND_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Operadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Asignacion_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
-	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/declaracionesVec_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Impresion_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/If_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Switch_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/EscapeSecuencia_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/for_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/while_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Break_continue_arm64.c \
 
 # Fuentes GUI
 GUI_SRC = \
@@ -114,7 +122,15 @@ GUI_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Operadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Asignacion_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
-	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c
+	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/declaracionesVec_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Impresion_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/If_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Switch_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/EscapeSecuencia_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/for_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/while_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Break_continue_arm64.c \
 
 all: parser gui
 

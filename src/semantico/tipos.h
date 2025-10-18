@@ -25,6 +25,7 @@ TipoDato deducirTipoExpr(NodoAST* expr);
 const char* valorPorDefectoTipo(TipoDato t);
 int esWidening(TipoDato origen, TipoDato destino);
 int esNarrowing(TipoDato origen, TipoDato destino);
-
+TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST);
+TipoDato obtenerTipoBaseVector(NodoAST* nodoVector, const char* nombre);
 
 #endif

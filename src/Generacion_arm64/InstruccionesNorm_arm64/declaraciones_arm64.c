@@ -18,11 +18,12 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
 void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
     if (!gen->buffer || !codigo) return;
 
-    const char* start_marker = "    // Punto de entrada del programa\n";
-    char* pos = strstr(gen->buffer, start_marker);
+    // **BUSCAR LA SALIDA DEL PROGRAMA PARA INSERTAR ANTES**
+    const char* exit_marker = "    // Salida del programa por defecto\n";
+    char* pos = strstr(gen->buffer, exit_marker);
+    
     if (pos) {
-        // Insertar justo después del comentario de punto de entrada
-        pos += strlen(start_marker);
+        // **INSERTAR JUSTO ANTES DE LA SALIDA DEL PROGRAMA**
         size_t offset = pos - gen->buffer;
         size_t len_actual = strlen(gen->buffer);
         size_t len_codigo = strlen(codigo);
@@ -31,14 +32,37 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
         if (len_actual + len_codigo + 1 >= gen->buffer_size) {
             gen->buffer_size = len_actual + len_codigo + 1024;
             gen->buffer = realloc(gen->buffer, gen->buffer_size);
+            // Recalcular posición después del realloc
+            pos = gen->buffer + offset;
         }
 
         // Mover el contenido para hacer espacio
-        memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
-        memcpy(gen->buffer + offset, codigo, len_codigo);
+        memmove(pos + len_codigo, pos, len_actual - offset + 1);
+        memcpy(pos, codigo, len_codigo);
     } else {
-        // Si no encuentra el marcador, agregar al final
-        agregarCodigoAlBuffer(gen, codigo);
+        // Si no encuentra el marcador de salida, buscar el punto de entrada
+        const char* start_marker = "    // Punto de entrada del programa\n";
+        pos = strstr(gen->buffer, start_marker);
+        if (pos) {
+            // Insertar justo después del comentario de punto de entrada
+            pos += strlen(start_marker);
+            size_t offset = pos - gen->buffer;
+            size_t len_actual = strlen(gen->buffer);
+            size_t len_codigo = strlen(codigo);
+
+            // Redimensionar buffer si es necesario
+            if (len_actual + len_codigo + 1 >= gen->buffer_size) {
+                gen->buffer_size = len_actual + len_codigo + 1024;
+                gen->buffer = realloc(gen->buffer, gen->buffer_size);
+            }
+
+            // Mover el contenido para hacer espacio
+            memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
+            memcpy(gen->buffer + offset, codigo, len_codigo);
+        } else {
+            // Si no encuentra ningún marcador, agregar al final
+            agregarCodigoAlBuffer(gen, codigo);
+        }
     }
 }
 void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo) {
@@ -208,32 +232,39 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         }
         // Si es un valor literal normal
         else if (valorNodo->valor) {
-            inicializado = true;
-            if (tipo == TIPO_BOOLEAN) {
-                if (strcmp(valorNodo->valor, "true") == 0) {
-                    strncpy(valorStr, "1", sizeof(valorStr));
-                } else if (strcmp(valorNodo->valor, "false") == 0) {
-                    strncpy(valorStr, "0", sizeof(valorStr));
-                }
-            } else if (tipo == TIPO_STRING){
-                if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
-                    strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            if(valorNodo->tipo == AST_IDENTIFICADOR){
+                 inicializado = true;
+                es_operacion = true; // Para que se genere el código de asignación en .text
+                printf("[DEBUG] Declaración '%s' inicializada con variable '%s'\n", nombreVariable, valorNodo->valor);
+            }else{
+                inicializado = true;
+                if (tipo == TIPO_BOOLEAN) {
+                    if (strcmp(valorNodo->valor, "true") == 0) {
+                        strncpy(valorStr, "1", sizeof(valorStr));
+                    } else if (strcmp(valorNodo->valor, "false") == 0) {
+                        strncpy(valorStr, "0", sizeof(valorStr));
+                    }
+                } else if (tipo == TIPO_STRING){
+                    if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
+                        strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+                    } else {
+                        snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
+                    }
+                } else if (tipo == TIPO_CHAR) {
+                    if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
+                        strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+                    } else if (strlen(valorNodo->valor) == 1) {
+                        snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
+                    } else {
+                        printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
+                        strncpy(valorStr, "'\\0'", sizeof(valorStr));
+                    }
                 } else {
-                    snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
-                }
-            } else if (tipo == TIPO_CHAR) {
-                if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
                     strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-                } else if (strlen(valorNodo->valor) == 1) {
-                    snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
-                } else {
-                    printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
-                    strncpy(valorStr, "'\\0'", sizeof(valorStr));
                 }
-            } else {
-                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+                valorStr[sizeof(valorStr) - 1] = '\0';
+        
             }
-            valorStr[sizeof(valorStr) - 1] = '\0';
         }
     }
 
@@ -258,8 +289,18 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
     }
 
     if (inicializado && es_operacion) {
-        // Generar solo la declaración con .skip 8 para strings
-        if (tipo == TIPO_STRING) {
+
+        // Generar el código de asignación en ARM64
+        if (tipo == TIPO_INT) {
+            char asignacion[128];
+            snprintf(asignacion, sizeof(asignacion),
+                "    ldr x1, =%s\n"
+                "    ldr w0, [x1]\n"
+                "    ldr x1, =%s\n"
+                "    str w0, [x1]\n",
+                valorNodo->valor, nombreVariable);
+            insertarEnSeccionText(gen, asignacion);
+        } else if (tipo == TIPO_STRING) {
             if (es_operacion) {
                 snprintf(codigo, sizeof(codigo), "%s: .skip 8\n", nombreVariable);
             } else {

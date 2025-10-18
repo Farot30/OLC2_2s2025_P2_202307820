@@ -25,5 +25,6 @@ void agregarCodigoAlBuffer(GeneradorDeclaraciones* gen, const char* codigo);
 
 void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo);
 void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo);
+void insertarEnSeccionBss(GeneradorDeclaraciones* gen, const char* codigo);
 
 #endif

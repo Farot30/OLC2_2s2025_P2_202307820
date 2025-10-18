@@ -166,3 +166,83 @@ const char* valorPorDefectoTipo(TipoDato t){
         default: return "?";
     }
 }
+
+
+// Busca el tipo de un identificador en el AST, recursivamente
+TipoDato buscarTipoIdentificadorAST(const char* nombre, NodoAST* nodo) {
+    if (!nodo) return TIPO_DESCONOCIDO;
+
+    // Si es una declaración y el identificador coincide
+    if (nodo->tipo == AST_DECLARACION && nodo->num_hijos >= 2) {
+        NodoAST* tipoNodo = nodo->hijos[0];
+        NodoAST* idNodo = nodo->hijos[1];
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && strcmp(idNodo->valor, nombre) == 0) {
+            return obtenerTipoDesdeString(tipoNodo->valor);
+        }
+    }
+    // Buscar recursivamente en los hijos
+    for (int i = 0; i < nodo->num_hijos; i++) {
+        TipoDato t = buscarTipoIdentificadorAST(nombre, nodo->hijos[i]);
+        if (t != TIPO_DESCONOCIDO) return t;
+    }
+
+    if (nodo->tipo == AST_DECLARACION_VECTOR && nodo->num_hijos >= 2) {
+        NodoAST* idNodo = nodo->hijos[1];
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && strcmp(idNodo->valor, nombre) == 0) {
+            return TIPO_VECTOR;
+        }
+    }
+    return TIPO_DESCONOCIDO;
+}
+
+TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
+    if (!expr) return TIPO_DESCONOCIDO;
+
+    switch (expr->tipo) {
+        case AST_NUMERO:
+            if (strchr(expr->valor, '.')) return TIPO_DOUBLE;
+            return TIPO_INT;
+        case AST_CADENA:
+        case AST_STRING:
+            return TIPO_STRING;
+        case AST_CARACTER:
+            return TIPO_CHAR;
+        case AST_BOOLEAN:
+            return TIPO_BOOLEAN;
+        case AST_IDENTIFICADOR:
+            // Buscar tipo en el AST
+            return buscarTipoIdentificadorAST(expr->valor, raizAST);
+        case AST_OPERACION: {
+            if (expr->num_hijos != 2) return TIPO_DESCONOCIDO;
+            TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], raizAST);
+            TipoDato tipoDer = deducirTipoExprARM64(expr->hijos[1], raizAST);
+            if (tipoIzq == TIPO_DOUBLE || tipoDer == TIPO_DOUBLE) return TIPO_DOUBLE;
+            if (tipoIzq == TIPO_FLOAT || tipoDer == TIPO_FLOAT) return TIPO_FLOAT;
+            if (tipoIzq == TIPO_INT || tipoDer == TIPO_INT) return TIPO_INT;
+            if (tipoIzq == TIPO_CHAR || tipoDer == TIPO_CHAR) return TIPO_INT;
+            return TIPO_DESCONOCIDO;
+        }
+        default:
+            return TIPO_DESCONOCIDO;
+    }
+}
+
+TipoDato obtenerTipoBaseVector(NodoAST* raiz, const char* nombre) {
+    if (!raiz) return TIPO_DESCONOCIDO;
+
+    // Busca la declaración del vector por nombre
+    if (raiz->tipo == AST_DECLARACION_VECTOR && raiz->num_hijos >= 2) {
+        NodoAST* tipoNodo = raiz->hijos[0];
+        NodoAST* idNodo = raiz->hijos[1];
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && strcmp(idNodo->valor, nombre) == 0) {
+            // El tipo base está en tipoNodo->valor
+            return obtenerTipoDesdeString(tipoNodo->valor);
+        }
+    }
+    // Buscar recursivamente en los hijos
+    for (int i = 0; i < raiz->num_hijos; i++) {
+        TipoDato t = obtenerTipoBaseVector(raiz->hijos[i], nombre);
+        if (t != TIPO_DESCONOCIDO) return t;
+    }
+    return TIPO_DESCONOCIDO;
+}

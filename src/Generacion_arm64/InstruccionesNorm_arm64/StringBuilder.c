@@ -198,9 +198,8 @@ static void procesarNodosConcatenacion(NodoAST* nodo, GeneradorDeclaraciones* ge
             }
 
             snprintf(buffer, sizeof(buffer), 
-                "    adrp x0, %s\n"
-                "    add x0, x0, :lo12:%s\n"
-                "    bl sb_append\n", nombreStr, nombreStr);
+            "    ldr x0, =%s\n"          // CAMBIADO: era adrp/add
+            "    bl sb_append\n", nombreStr);
         } else {
             // **USAR LA NUEVA FUNCIÓN MEJORADA**
             bool esAsciz = esVariableAsciz(gen, nodo->valor);
@@ -219,15 +218,13 @@ static void procesarNodosConcatenacion(NodoAST* nodo, GeneradorDeclaraciones* ge
             if (esAsciz) {
                 // Es string literal (.asciz)
                 snprintf(buffer, sizeof(buffer),
-                    "    adrp x0, %s\n"
-                    "    add x0, x0, :lo12:%s\n"
-                    "    bl sb_append\n", nodo->valor, nodo->valor);
+                    "    ldr x0, =%s\n"
+                    "    bl sb_append\n", nodo->valor);
             } else {
                 // Es puntero (.skip 8)
                 snprintf(buffer, sizeof(buffer),
-                    "    adrp x0, %s\n"
-                    "    add x0, x0, :lo12:%s\n"
-                    "    ldr x0, [x0]                // Cargar contenido de la variable\n"
+                    "    ldr x0, =%s\n"
+                    "    ldr x0, [x0]\n"
                     "    bl sb_append\n", nodo->valor, nodo->valor);
             }
         }
@@ -404,19 +401,19 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    \n"
         "    // Reservar memoria\n"
         "    bl sb_malloc\n"
-        "    adr x1, sb_buffer\n"
+        "    ldr x1, =sb_buffer\n"         // CAMBIADO: era adr
         "    str x0, [x1]\n"
         "    \n"
         "    // Guardar capacidad\n"
-        "    adr x1, sb_capacity\n"
+        "    ldr x1, =sb_capacity\n"       // CAMBIADO: era adr
         "    str x19, [x1]\n"
         "    \n"
         "    // Longitud inicial = 0\n"
-        "    adr x1, sb_length\n"
+        "    ldr x1, =sb_length\n"         // CAMBIADO: era adr
         "    str xzr, [x1]\n"
         "    \n"
         "    // Poner null terminator\n"
-        "    adr x1, sb_buffer\n"
+        "    ldr x1, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    strb wzr, [x1]\n"
         "    \n"
@@ -435,12 +432,12 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    mov x20, x0                 // x20 = longitud a agregar\n"
         "    \n"
         "    // Verificar si necesitamos expandir\n"
-        "    adr x0, sb_length\n"
+        "    ldr x0, =sb_length\n"         // CAMBIADO: era adr
         "    ldr x0, [x0]\n"
         "    add x0, x0, x20             // longitud_total = actual + nueva\n"
         "    add x0, x0, #1              // +1 para null\n"
         "    \n"
-        "    adr x1, sb_capacity\n"
+        "    ldr x1, =sb_capacity\n"       // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    cmp x0, x1\n"
         "    ble sb_append_copy          // si cabe, copiar\n"
@@ -451,9 +448,9 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    \n"
         "sb_append_copy:\n"
         "    // Copiar string al final\n"
-        "    adr x0, sb_buffer\n"
+        "    ldr x0, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x0, [x0]\n"
-        "    adr x1, sb_length\n"
+        "    ldr x1, =sb_length\n"         // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    add x0, x0, x1              // posición final\n"
         "    \n"
@@ -461,7 +458,7 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    bl strcpy\n"
         "    \n"
         "    // Actualizar longitud\n"
-        "    adr x0, sb_length\n"
+        "    ldr x0, =sb_length\n"         // CAMBIADO: era adr
         "    ldr x1, [x0]\n"
         "    add x1, x1, x20\n"
         "    str x1, [x0]\n"
@@ -485,21 +482,21 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    \n"
         "    // Copiar contenido antiguo\n"
         "    mov x0, x20\n"
-        "    adr x1, sb_buffer\n"
+        "    ldr x1, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    bl strcpy\n"
         "    \n"
         "    // Liberar buffer antiguo\n"
-        "    adr x0, sb_buffer\n"
+        "    ldr x0, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x0, [x0]\n"
-        "    adr x1, sb_capacity\n"
+        "    ldr x1, =sb_capacity\n"       // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    bl sb_free_buffer\n"
         "    \n"
         "    // Actualizar puntero y capacidad\n"
-        "    adr x0, sb_buffer\n"
+        "    ldr x0, =sb_buffer\n"         // CAMBIADO: era adr
         "    str x20, [x0]\n"
-        "    adr x0, sb_capacity\n"
+        "    ldr x0, =sb_capacity\n"       // CAMBIADO: era adr
         "    str x19, [x0]\n"
         "    \n"
         "    ldr x20, [sp, #24]\n"
@@ -508,16 +505,16 @@ void generarFuncionesAuxiliares(GeneradorStringBuilder* gen) {
         "    ret\n\n"
         "// Obtener string final\n"
         "sb_get_string:\n"
-        "    adr x0, sb_buffer\n"
+        "    ldr x0, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x0, [x0]\n"
         "    ret\n\n"
         "// Liberar StringBuilder\n"
         "sb_free:\n"
         "    stp x29, x30, [sp, #-16]!\n"
         "    \n"
-        "    adr x0, sb_buffer\n"
+        "    ldr x0, =sb_buffer\n"         // CAMBIADO: era adr
         "    ldr x0, [x0]\n"
-        "    adr x1, sb_capacity\n"
+        "    ldr x1, =sb_capacity\n"       // CAMBIADO: era adr
         "    ldr x1, [x1]\n"
         "    bl sb_free_buffer\n"
         "    \n"

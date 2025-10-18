@@ -5,6 +5,13 @@
 #include "InstruccionesNorm_arm64/Operadores_arm64.h"
 #include "InstruccionesNorm_arm64/Asignacion_arm64.h"
 #include "InstruccionesNorm_arm64/StringBuilder.h"
+#include "InstruccionesSent_arm64/If_arm64.h"
+#include "Impresion_arm64.h"
+#include "InstruccionesSent_arm64/Switch_arm64.h"
+#include "InstruccionesSent_arm64/for_arm64.h"
+#include "InstruccionesSent_arm64/while_arm64.h"
+#include "InstruccionesSent_arm64/Break_continue_arm64.h"
+#include "Vectores_arm64/declaracionesVec_arm64.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -137,7 +144,8 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     const char* estructura_completa = 
         "// Código ARM64 generado por JavaLang Compiler\n"
         ".global _start\n"
-        ".extern itoa\n\n"
+        ".extern itoa\n"
+        ".extern printf\n\n"
         "\n// declaraciones de variables\n"
         ".data\n"
         "\n// constantes\n"
@@ -206,6 +214,8 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                     
                     // **AGREGAR LA OPERACIÓN A PENDIENTES**
                     agregarOperacionPendiente(nombreVariable, valorNodo, tipo, true);
+
+                    procesarOperacionesPendientes(gen);
                 } else {
                     // Declaración simple, generar inmediatamente
                     generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
@@ -227,12 +237,89 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             printf("[DEBUG] Nodo de asignación compuesta detectado arm64\n");
             generarAsignacionCompuestaARM64(&generador_principal.gen_declaraciones, nodo);
             break;
+        case AST_IF:
+            printf("[DEBUG] Nodo IF detectado arm64\n");
+            if (nodo->num_hijos == 2) {
+                // IF simple
+                generarCodigoIF(&gen->gen_declaraciones, nodo);
+            } else if (nodo->num_hijos == 3) {
+                // IF-ELSE
+                generarCodigoIFElse(&gen->gen_declaraciones, nodo);
+            } else if (nodo->num_hijos >= 4) {
+                // IF-ELSE IF
+                generarCodigoIFElseIF(&gen->gen_declaraciones, nodo);
+            }
+            break;
+        case AST_ELSEIF:
+            printf("[DEBUG] Nodo ELSEIF detectado arm64\n");
+            generarCodigoIFElseIF(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_PRINT:
+            printf("[DEBUG] Nodo PRINT detectado arm64\n");
+            generarImpresionARM64(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_INCREMENTO:
+            printf("[DEBUG] Nodo INCREMENTO detectado arm64\n");
+            if (nodo->num_hijos > 0 && nodo->hijos[0] && nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                const char* nombreVar = nodo->hijos[0]->valor;
+                char codigo[128];
+                snprintf(codigo, sizeof(codigo),
+                    "    // Incremento: %s++\n"
+                    "    ldr x1, =%s\n"
+                    "    ldr w0, [x1]\n"
+                    "    add w0, w0, #1\n"
+                    "    str w0, [x1]\n",
+                    nombreVar, nombreVar);
+                insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+            }
+            break;
+        case AST_DECREMENTO:
+            printf("[DEBUG] Nodo DECREMENTO detectado arm64\n");
+            if (nodo->num_hijos > 0 && nodo->hijos[0] && nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                const char* nombreVar = nodo->hijos[0]->valor;
+                char codigo[128];
+                snprintf(codigo, sizeof(codigo),
+                    "    // Decremento: %s--\n"
+                    "    ldr x1, =%s\n"
+                    "    ldr w0, [x1]\n"
+                    "    sub w0, w0, #1\n"
+                    "    str w0, [x1]\n",
+                    nombreVar, nombreVar);
+                insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+            }
+            break;
+        case AST_SWITCH:
+            printf("[DEBUG] Nodo SWITCH detectado arm64\n");
+            generarCodigoSwitch(&gen->gen_declaraciones, nodo);
+            break;
 
+        case AST_FOR:
+            printf("[DEBUG] Nodo FOR detectado arm64\n");
+            generarCodigoFor(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_WHILE:
+            printf("[DEBUG] Nodo WHILE detectado arm64\n");
+            generarCodigoWhile(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_BREAK:
+            printf("[DEBUG] Nodo BREAK detectado arm64\n");
+            generarCodigoBreak(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_CONTINUE:
+            printf("[DEBUG] Nodo CONTINUE detectado arm64\n");
+            generarCodigoContinue(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_DECLARACION_VECTOR:
+            printf("[DEBUG] Nodo de declaración de vector detectado\n");
+            generarDeclaracionVectorARM64(&gen->gen_declaraciones, nodo);
+            break;
         default:
             // Procesar hijos recursivamente
             for (int i = 0; i < nodo->num_hijos; i++) {
                 procesarNodoAST_ARM64(gen, nodo->hijos[i]);
             }
+
+            procesarOperacionesPendientes(gen);
             break;
     }
 }

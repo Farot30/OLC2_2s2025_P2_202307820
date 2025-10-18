@@ -315,10 +315,13 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
         }
 
         case AST_PRINT:
-            //printf("[DEBUG] Procesando print\n");
+            GeneradorCodigoARM64(nodo);
+            printf("[DEBUG] Procesando print\n");
             if (nodo->num_hijos > 0 && nodo->hijos[0]) {
+                printf("[DEBUG] Evaluando expresión para print\n");
                 imprimirEvaluado(nodo->hijos[0]);
             } else {
+                printf("[DEBUG] No hay expresión para imprimir\n");
                 printf("\n");  // Print empty line if no expression
                 capture_print_output("\n");
             }
@@ -345,9 +348,11 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
                 // Incrementar el valor
                 if (nodo->valor && strcmp(nodo->valor, "++") == 0) {
                     simbolo->valor.v.i++;
+                    GeneradorCodigoARM64(nodo);
                     printf("[DEBUG] Variable '%s' incrementada a: %d\n", nombreVar, simbolo->valor.v.i);
                 } else if (nodo->valor && strcmp(nodo->valor, "--") == 0) {
                     simbolo->valor.v.i--;
+                    GeneradorCodigoARM64(nodo);
                     printf("[DEBUG] Variable '%s' decrementada a: %d\n", nombreVar, simbolo->valor.v.i);
                 }
                 
@@ -358,15 +363,20 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return EJEC_OK;
 
         case AST_IF:
-            ResultadoEjecucion res_if = ejecutarNodoIf(nodo);
-            return res_if;
+            GeneradorCodigoARM64(nodo);
+            return EJEC_OK;
+
+            // ResultadoEjecucion res_if = ejecutarNodoIf(nodo);
+            //return res_if;
         case AST_DECLARACION_CONST:
             printf("[DEBUG] Procesando declaración de constante\n");
-            verificarDeclaracionConstante(nodo);
+            //verificarDeclaracionConstante(nodo);
             GeneradorCodigoARM64(nodo);
             return EJEC_OK;
             
         case AST_SWITCH:
+            GeneradorCodigoARM64(nodo);
+            
             contexto_break++;
             contexto_continue++;
             ResultadoEjecucion res_switch = EjecturarNodoSwitch(nodo);
@@ -374,22 +384,29 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             contexto_continue--;
             return res_switch;
             
+           return EJEC_OK;
         case AST_WHILE:
+            GeneradorCodigoARM64(nodo);
+        /*
             contexto_break++;
             contexto_continue++;
             ResultadoEjecucion resWHILE = ejecutarSetenciaWhile(nodo);
             contexto_break--;
             contexto_continue--;
             return resWHILE;
-            
+        */  
+            return EJEC_OK;  
         case AST_FOR:
+            GeneradorCodigoARM64(nodo);
+            /*
             contexto_break++;
             contexto_continue++;
             ResultadoEjecucion resFOR = ejecutarSentenciaFor(nodo);
             contexto_break--;
             contexto_continue--;
             return resFOR;
-
+*/
+            return EJEC_OK;
         case AST_FOR_VECTOR:
             contexto_break++;
             contexto_continue++;
@@ -398,12 +415,16 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             contexto_continue--;
             return resFORV;
         case AST_BREAK:
+            GeneradorCodigoARM64(nodo);
             printf("[DEBUG AST_BREAK] Ejecutando break\n");
             return ejecutarSentenciaBreak(nodo);
             
         case AST_CONTINUE:
+            GeneradorCodigoARM64(nodo);
+            printf("[DEBUG AST_CONTINUE] Ejecutando continue\n");
             return ejecutarSentenciaContinue(nodo);
         case AST_DECLARACION_VECTOR:
+            GeneradorCodigoARM64(nodo);
             printf("[DEBUG] Procesando declaración de vector\n");
             verificarDeclaracionVector(nodo);
             return EJEC_OK;
