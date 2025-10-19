@@ -1,0 +1,16 @@
+public static void main() {
+    int total = 8;
+    System.out.println("Resultado: " + total);
+    
+    int y = 7;
+    System.out.println("hola" + y + "mano");
+    
+    double precio = 15.99;
+    System.out.println("Precio: $" + precio);
+    
+    char letra = 'A';
+    System.out.println("Letra: " + letra);
+    
+    boolean activo = true;
+    System.out.println("Estado: " + activo);
+}

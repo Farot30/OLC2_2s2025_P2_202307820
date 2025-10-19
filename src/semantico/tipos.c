@@ -214,6 +214,14 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
             return buscarTipoIdentificadorAST(expr->valor, raizAST);
         case AST_OPERACION: {
             if (expr->num_hijos != 2) return TIPO_DESCONOCIDO;
+            // --- CORRECCIÓN: Si es concatenación y uno es string, retorna string ---
+            if (strcmp(expr->valor, "+") == 0) {
+                TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], raizAST);
+                TipoDato tipoDer = deducirTipoExprARM64(expr->hijos[1], raizAST);
+                if (tipoIzq == TIPO_STRING || tipoDer == TIPO_STRING) return TIPO_STRING;
+                // Si ambos son char, también puede considerarse string (opcional)
+            }
+            // Resto de operaciones aritméticas
             TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], raizAST);
             TipoDato tipoDer = deducirTipoExprARM64(expr->hijos[1], raizAST);
             if (tipoIzq == TIPO_DOUBLE || tipoDer == TIPO_DOUBLE) return TIPO_DOUBLE;
