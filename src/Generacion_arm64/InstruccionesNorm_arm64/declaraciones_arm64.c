@@ -2,6 +2,7 @@
 #include "declaracionConst_arm64.h"
 #include "Operadores_arm64.h"
 #include "Evaluadores_arm64.h"
+#include "../Embebidas/EvaluadorExpr_arm64.h"
 #include "../../semantico/tipos.h"
 #include "../../semantico/semantico.h"
 #include "../../AST/ast.h"
@@ -201,148 +202,103 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         return;
     }
 
-
     const char* nombreVariable = idNodo->valor;
     const char* tipoVariable = tipoNodo->valor;
     TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
 
-    char valorStr[64] = "0";
-    bool inicializado = false;
-    bool es_operacion = false;
-
-    if (valorNodo && (valorNodo->tipo == AST_OPERACION || valorNodo->tipo == AST_EQUAL) && strcmp(valorNodo->valor, ".equals") == 0) {
-        char decl[64];
-        snprintf(decl, sizeof(decl), "%s: .byte 0\n", nombreVariable);
-        insertarEnSeccionData(gen, decl);
-
-        const char* nombreVarResultado = nombreVariable;
-        const char* nombreStr1 = valorNodo->hijos[0]->valor;
-        const char* nombreStr2 = valorNodo->hijos[1]->valor;
-
-        generarCodigoEqualsCompleto(gen, nombreVarResultado, nombreStr1, nombreStr2);
-        return;
-    }
-
-    if (valorNodo) {
-        // **DETECTAR SI ES UNA OPERACIÓN**
-        if (valorNodo->tipo == AST_OPERACION) {
-            es_operacion = true;
-            inicializado = true;
-            printf("[DEBUG] Detectada operación '%s' en declaración de '%s'\n", valorNodo->valor, nombreVariable);
-        }
-        // Si es un valor literal normal
-        else if (valorNodo->valor) {
-            if(valorNodo->tipo == AST_IDENTIFICADOR){
-                 inicializado = true;
-                es_operacion = true; // Para que se genere el código de asignación en .text
-                printf("[DEBUG] Declaración '%s' inicializada con variable '%s'\n", nombreVariable, valorNodo->valor);
-            }else{
-                inicializado = true;
-                if (tipo == TIPO_BOOLEAN) {
-                    if (strcmp(valorNodo->valor, "true") == 0) {
-                        strncpy(valorStr, "1", sizeof(valorStr));
-                    } else if (strcmp(valorNodo->valor, "false") == 0) {
-                        strncpy(valorStr, "0", sizeof(valorStr));
-                    }
-                } else if (tipo == TIPO_STRING){
-                    if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
-                        strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-                    } else {
-                        snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
-                    }
-                } else if (tipo == TIPO_CHAR) {
-                    if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
-                        strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-                    } else if (strlen(valorNodo->valor) == 1) {
-                        snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
-                    } else {
-                        printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
-                        strncpy(valorStr, "'\\0'", sizeof(valorStr));
-                    }
-                } else {
-                    strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-                }
-                valorStr[sizeof(valorStr) - 1] = '\0';
-        
-            }
-        }
-    }
-
     char codigo[512];
     const char* tipoDeclaracion = "word";
-    if (tipo == TIPO_DOUBLE) {
-        tipoDeclaracion = "double";
-    } else if (tipo == TIPO_FLOAT) {
-        tipoDeclaracion = "float";
-    } else if (tipo == TIPO_CHAR) {
-        tipoDeclaracion = "byte";
-    } else if (tipo == TIPO_BOOLEAN) {
-        tipoDeclaracion = "byte";
-    } else if (tipo == TIPO_STRING) {
-        
-        if (es_operacion){
-            tipoDeclaracion = "skip 8";
+    if (tipo == TIPO_DOUBLE) tipoDeclaracion = "double";
+    else if (tipo == TIPO_FLOAT) tipoDeclaracion = "float";
+    else if (tipo == TIPO_CHAR) tipoDeclaracion = "byte";
+    else if (tipo == TIPO_BOOLEAN) tipoDeclaracion = "byte";
+    else if (tipo == TIPO_STRING) tipoDeclaracion = "skip 8";
 
-        } else {
-            tipoDeclaracion = "asciz";
+    // --- INTEGRACIÓN DE EVALUADOR RECURSIVO ---
+    if (valorNodo && (valorNodo->tipo == AST_OPERACION || valorNodo->tipo == AST_VALUEOF)) {
+        // 1. Declaración en .data
+        snprintf(codigo, sizeof(codigo), "%s: .%s\n", nombreVariable, tipoDeclaracion);
+        insertarEnSeccionData(gen, codigo);
+
+        // 2. Evaluar la expresión recursivamente
+        int regIndex = 1;
+        ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &regIndex);
+
+        // 3. Insertar el código generado por la expresión
+        insertarEnSeccionText(gen, resultado.codigo);
+
+        // 4. Asignar el resultado a la variable
+        if (tipo == TIPO_STRING) {
+            snprintf(codigo, sizeof(codigo),
+                "    ldr x1, =%s\n"
+                "    str %s, [x1]\n", nombreVariable, resultado.resultado);
+        } else if (tipo == TIPO_INT || tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
+            snprintf(codigo, sizeof(codigo),
+                "    ldr x1, =%s\n"
+                "    str %s, [x1]\n", nombreVariable, resultado.resultado);
+        } else if (tipo == TIPO_DOUBLE || tipo == TIPO_FLOAT) {
+            snprintf(codigo, sizeof(codigo),
+                "    ldr x1, =%s\n"
+                "    str d0, [x1]\n", nombreVariable); // Ajusta si usas otro registro para double/float
         }
+        insertarEnSeccionText(gen, codigo);
+        return;
     }
 
-    if (inicializado && es_operacion) {
+    // --- CASO: LITERALES O VARIABLES ---
+    char valorStr[64] = "0";
+    bool inicializado = false;
 
-        // Generar el código de asignación en ARM64
-        if (tipo == TIPO_INT) {
-            char asignacion[128];
-            snprintf(asignacion, sizeof(asignacion),
-                "    ldr x1, =%s\n"
-                "    ldr w0, [x1]\n"
-                "    ldr x1, =%s\n"
-                "    str w0, [x1]\n",
-                valorNodo->valor, nombreVariable);
-            insertarEnSeccionText(gen, asignacion);
+    if (valorNodo && valorNodo->valor) {
+        inicializado = true;
+        if (tipo == TIPO_BOOLEAN) {
+            if (strcmp(valorNodo->valor, "true") == 0) strncpy(valorStr, "1", sizeof(valorStr));
+            else if (strcmp(valorNodo->valor, "false") == 0) strncpy(valorStr, "0", sizeof(valorStr));
         } else if (tipo == TIPO_STRING) {
-            if (es_operacion) {
-                snprintf(codigo, sizeof(codigo), "%s: .skip 8\n", nombreVariable);
+            if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
+                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
             } else {
-                snprintf(codigo, sizeof(codigo), "%s: .asciz \"%s\"\n", nombreVariable, valorStr);
+                snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
+            }
+        } else if (tipo == TIPO_CHAR) {
+            if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
+                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            } else if (strlen(valorNodo->valor) == 1) {
+                snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
+            } else {
+                printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
+                strncpy(valorStr, "'\\0'", sizeof(valorStr));
             }
         } else {
-            snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+            strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
         }
-        insertarEnSeccionData(gen, codigo);
-        // **NO GENERAR LA OPERACIÓN AQUÍ - SE HACE DESPUÉS**
-        return;
+        valorStr[sizeof(valorStr) - 1] = '\0';
     }
 
     if (inicializado) {
-        if (es_operacion) {
-            // **GENERAR DECLARACIÓN CON VALOR 0 EN .data**
-            if (tipo == TIPO_STRING) {
-                snprintf(codigo, sizeof(codigo), "%s: .skip 8\n", nombreVariable);
+        if (tipo == TIPO_STRING) {
+            if (valorStr[0] != '"') {
+                char valorConComillas[128];
+                snprintf(valorConComillas, sizeof(valorConComillas), "\"%s\"", valorStr);
+                snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreVariable, valorConComillas);
             } else {
-                snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+                snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreVariable, valorStr);
             }
-            insertarEnSeccionData(gen, codigo);
-            //if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
-
-            // **GENERAR CÓDIGO DE OPERACIÓN EN .text**
-            generarCodigoOperacionARM64(gen, nombreVariable, valorNodo, tipo);
-        }  else {
-            // Declaración normal con valor literal
-            if (tipo == TIPO_STRING) {
-                // **CORREGIR: Asegurar comillas en strings literales**
-                if (valorStr[0] != '"') {
-                    char valorConComillas[128];
-                    snprintf(valorConComillas, sizeof(valorConComillas), "\"%s\"", valorStr);
-                    snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorConComillas);
-                } else {
-                    snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
-                }
-            } else {
-                snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+        } else if(tipo == TIPO_FLOAT){
+            // Quitar la 'f' si viene en el literal (opcional)
+            char valorFloat[32];
+            strncpy(valorFloat, valorStr, sizeof(valorFloat));
+            valorFloat[sizeof(valorFloat)-1] = '\0';
+            size_t len = strlen(valorFloat);
+            if (valorFloat[len-1] == 'f' || valorFloat[len-1] == 'F') {
+                valorFloat[len-1] = '\0';
             }
-            insertarEnSeccionData(gen, codigo);
+            snprintf(codigo, sizeof(codigo), "%s: .float %s\n", nombreVariable, valorFloat);
+        } 
+        else {
+            snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
         }
+        insertarEnSeccionData(gen, codigo);
     } else {
         // Variable no inicializada va a .bss
         size_t espacio = 4;
@@ -350,9 +306,7 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         else if (tipo == TIPO_FLOAT) espacio = 4;
         else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) espacio = 1;
         else if (tipo == TIPO_STRING) espacio = 8;
-        
         snprintf(codigo, sizeof(codigo), "%s: .space %zu\n", nombreVariable, espacio);
         insertarEnSeccionBss(gen, codigo);
-        //if (gen->archivo) fprintf(gen->archivo, "%s", codigo);
     }
 }

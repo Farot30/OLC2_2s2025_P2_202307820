@@ -370,8 +370,8 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             //return res_if;
         case AST_DECLARACION_CONST:
             printf("[DEBUG] Procesando declaración de constante\n");
-            //verificarDeclaracionConstante(nodo);
             GeneradorCodigoARM64(nodo);
+            verificarDeclaracionConstante(nodo);
             return EJEC_OK;
             
         case AST_SWITCH:

@@ -21,7 +21,7 @@ typedef struct {
 // **FUNCIÓN RECURSIVA PARA RECOLECTAR PARTES DE CONCATENACIÓN**
 static void recolectarPartesConcatenacion(NodoAST* nodo, ParteConcatenacion* partes, int* numPartes, int maxPartes) {
     if (!nodo || *numPartes >= maxPartes) return;
-    
+    printf("[DEBUG CONCAT] Parte: tipo=%d, valor=%s, deducido=%d\n", nodo->tipo, nodo->valor ? nodo->valor : "(null)", partes[*numPartes].tipo);
     if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "+") == 0 && nodo->num_hijos == 2) {
         // Concatenación: procesar recursivamente izquierda y derecha
         recolectarPartesConcatenacion(nodo->hijos[0], partes, numPartes, maxPartes);
@@ -30,13 +30,14 @@ static void recolectarPartesConcatenacion(NodoAST* nodo, ParteConcatenacion* par
         // Nodo hoja: agregar a las partes
         partes[*numPartes].nodo = nodo;
         partes[*numPartes].tipo = deducirTipoExprARM64(nodo, astGlobal);
+        
         (*numPartes)++;
     }
 }
 
 
 
-static bool esVariableAscizImpresion(GeneradorDeclaraciones* gen, const char* nombreVar) {
+bool esVariableAscizImpresion(GeneradorDeclaraciones* gen, const char* nombreVar) {
     if (!gen->buffer || !nombreVar) return false;
     
     // Buscar la declaración exacta de la variable
@@ -79,8 +80,20 @@ static void insertarConstantesBooleanas(GeneradorDeclaraciones* gen) {
     if (!esVariableAscizImpresion(gen, "str_false")) {
         insertarEnSeccionData(gen, "str_false: .asciz \"false\"\n");
     }
+    if(!esVariableAscizImpresion(gen, "__temp_print_str")){
+        insertarEnSeccionBss(gen, "__temp_print_str: .skip 8\n");
+    }
 }
-
+static bool contieneStringEnOperacion(NodoAST* nodo) {
+    if (!nodo) return false;
+    TipoDato tipo = deducirTipoExprARM64(nodo, astGlobal);
+    
+    if (tipo == TIPO_STRING) return true;
+    for (int i = 0; i < nodo->num_hijos; i++) {
+        if (contieneStringEnOperacion(nodo->hijos[i])) return true;
+    }
+    return false;
+}
 
 // **FUNCIÓN PARA GENERAR PRINTF OPTIMIZADO DESDE CONCATENACIÓN**
 static bool generarPrintfDesdeConcatenacion(GeneradorDeclaraciones* gen, NodoAST* valorNodo, char* codigo) {
@@ -123,6 +136,7 @@ static bool generarPrintfDesdeConcatenacion(GeneradorDeclaraciones* gen, NodoAST
             numArgs++;
         } else {
             // Tipo no soportado: usar StringBuilder
+            printf("[DEBUG PRINTF] Tipo no soportado en concatenación: tipo=%d, valor=%s\n", tipo, parte->valor ? parte->valor : "(null)");
             return false;
         }
     }
@@ -253,6 +267,54 @@ int getVectorSize(NodoAST* raiz, const char* nombre) {
     return 0;
 }
 
+// Función para procesar operaciones recursivamente
+static void procesarOperacionRecursiva(GeneradorDeclaraciones* gen, NodoAST* nodo, char* codigo, int* regIndex) {
+    if (!nodo) return;
+
+    char buffer[256];
+
+    if (nodo->tipo == AST_OPERACION && nodo->num_hijos == 2) {
+        NodoAST* izq = nodo->hijos[0];
+        NodoAST* der = nodo->hijos[1];
+
+        // Procesar recursivamente los operandos
+        procesarOperacionRecursiva(gen, izq, codigo, regIndex);
+        int regIzq = *regIndex - 1;
+        procesarOperacionRecursiva(gen, der, codigo, regIndex);
+        int regDer = *regIndex - 1;
+
+        // Generar código para la operación
+        if (strcmp(nodo->valor, "+") == 0) {
+            snprintf(buffer, sizeof(buffer), "    add w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
+        } else if (strcmp(nodo->valor, "-") == 0) {
+            snprintf(buffer, sizeof(buffer), "    sub w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
+        } else if (strcmp(nodo->valor, "*") == 0) {
+            snprintf(buffer, sizeof(buffer), "    mul w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
+        } else if (strcmp(nodo->valor, "/") == 0) {
+            snprintf(buffer, sizeof(buffer), "    sdiv w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
+        }
+        strcat(codigo, buffer);
+        (*regIndex)++;
+    } else if (nodo->tipo == AST_NUMERO) {
+        // Cargar un número literal
+        snprintf(buffer, sizeof(buffer), "    mov w%d, #%s\n", *regIndex, nodo->valor);
+        strcat(codigo, buffer);
+        (*regIndex)++;
+    } else if (nodo->tipo == AST_IDENTIFICADOR) {
+        // Cargar el valor de una variable
+        snprintf(buffer, sizeof(buffer),
+            "    ldr x%d, =%s\n"
+            "    ldr w%d, [x%d]\n",
+            *regIndex, nodo->valor, *regIndex, *regIndex);
+        strcat(codigo, buffer);
+        (*regIndex)++;
+    } else if (nodo->tipo == AST_CARACTER) {
+        // Cargar el valor ASCII del carácter en el registro actual
+        snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", *regIndex, (int)nodo->valor[0]);
+        strcat(codigo, buffer);
+        (*regIndex)++;
+    }
+}
 
 // Función para generar impresión en ARM64 utilizando printf
 void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
@@ -278,29 +340,48 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     } else {
         // Detectar el tipo del valor a imprimir
         TipoDato tipo = deducirTipoExprARM64(valorNodo, astGlobal);
+        
 
         // **PRIORIDAD 1: Si es concatenación, intentar generar printf optimizado**
         if (valorNodo->tipo == AST_OPERACION && strcmp(valorNodo->valor, "+") == 0) {
-            if (generarPrintfDesdeConcatenacion(gen, valorNodo, codigo)) {
-                // Printf optimizado generado exitosamente
-                printf("[DEBUG] Printf optimizado generado para concatenación\n");
+            if (contieneStringEnOperacion(valorNodo)) {
+                // Concatenación de strings (usa tu lógica actual)
+                if (generarPrintfDesdeConcatenacion(gen, valorNodo, codigo)) {
+                    printf("[DEBUG] Printf optimizado generado para concatenación\n");
+                } else {
+                    insertarConstantesBooleanas(gen);
+                    // Fallback a StringBuilder si no se puede optimizar
+                    printf("[DEBUG] Fallback a StringBuilder para concatenación compleja\n");
+                    const char* nombreTemp = "__temp_print_str";
+                    generarConcatenacionStringBuilder(gen, nombreTemp, valorNodo);
+                    char formatoConst[64];
+                    snprintf(formatoConst, sizeof(formatoConst), "format_string_%d", gen->admin_registros->contador_constantes++);
+                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoConst);
+                    insertarEnSeccionData(gen, buffer);
+                    snprintf(buffer, sizeof(buffer),
+                        "    ldr x1, =%s\n"
+                        "    ldr x1, [x1]\n"
+                        "    ldr x0, =%s\n"
+                        "    bl printf\n",
+                        nombreTemp, formatoConst);
+                    strcat(codigo, buffer);
+                }
             } else {
-                // Fallback a StringBuilder si no se puede optimizar
-                printf("[DEBUG] Fallback a StringBuilder para concatenación compleja\n");
-                const char* nombreTemp = "__temp_print_str";
-                generarConcatenacionStringBuilder(gen, nombreTemp, valorNodo);
-                char formatoConst[64];
-                snprintf(formatoConst, sizeof(formatoConst), "format_string_%d", gen->admin_registros->contador_constantes++);
-                snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoConst);
+                // Operación aritmética (suma de números, chars, etc.)
+                int regIndex = 1;
+                procesarOperacionRecursiva(gen, valorNodo, codigo, &regIndex);
+                char formatoInt[64];
+                snprintf(formatoInt, sizeof(formatoInt), "format_int_%d", gen->admin_registros->contador_constantes++);
+                snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoInt);
                 insertarEnSeccionData(gen, buffer);
                 snprintf(buffer, sizeof(buffer),
-                    "    ldr x1, =%s\n"
-                    "    ldr x1, [x1]\n"
                     "    ldr x0, =%s\n"
+                    "    mov w1, w%d\n"
                     "    bl printf\n",
-                    nombreTemp, formatoConst);
+                    formatoInt, regIndex - 1);
                 strcat(codigo, buffer);
             }
+
         } else if (tipo == TIPO_STRING) {
             // String simple (no concatenación)
             char formatoConst[64];
@@ -386,26 +467,64 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     formatoInt, atoi(valorNodo->valor));
             }
             strcat(codigo, buffer);
-        } else if (tipo == TIPO_DOUBLE || tipo == TIPO_FLOAT) {
-            // Definir el formato en la sección .data
+        } else if (tipo == TIPO_FLOAT) {
             char formatoFloat[64];
             snprintf(formatoFloat, sizeof(formatoFloat), "format_float_%d", gen->admin_registros->contador_constantes++);
-            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoFloat);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%\\n\"\n", formatoFloat);
             insertarEnSeccionData(gen, buffer);
 
-            // Imprimir número de punto flotante
-            char nombreConst[64];
-            snprintf(nombreConst, sizeof(nombreConst), "float_const_%d", gen->admin_registros->contador_constantes++);
-            insertarConstanteDoubleRoData(gen, nombreConst, atof(valorNodo->valor));
+            // Imprimir variable double/float
+            if (valorNodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"      // x1 = dirección de la variable
+                    "    ldr d0, [x1]\n"     // d0 = valor de la variable
+                    "    ldr x0, =%s\n"      // x0 = formato
+                    "    bl printf\n",
+                    valorNodo->valor, formatoFloat);
+                strcat(codigo, buffer);
+            } else if (valorNodo->tipo == AST_NUMERO) {
+                // Si es un literal, crea una constante en .rodata
+                char nombreConst[64];
+                snprintf(nombreConst, sizeof(nombreConst), "float_const_%d", gen->admin_registros->contador_constantes++);
+                insertarConstanteDoubleRoData(gen, nombreConst, atof(valorNodo->valor));
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldr d0, [x1]\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    nombreConst, formatoFloat);
+                strcat(codigo, buffer);
+            }
+        } else if(tipo == TIPO_DOUBLE){
+            char formatoDouble[64];
+            snprintf(formatoDouble, sizeof(formatoDouble), "format_double_%d", gen->admin_registros->contador_constantes++);
+            snprintf(buffer, sizeof(buffer), "%s: .double \"%%\\n\"\n", formatoDouble);
+            insertarEnSeccionData(gen, buffer);
 
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x0, =%s\n"      // Formato para flotante
-                "    ldr x1, =%s\n"      // Cargar dirección del valor flotante
-                "    ldr d0, [x1]\n"     // Cargar el valor flotante en d0
-                "    bl printf\n",
-                nombreConst, formatoFloat);
-            strcat(codigo, buffer);
-        } else if (tipo == TIPO_VECTOR && valorNodo->tipo == AST_IDENTIFICADOR) {
+            // Imprimir variable double/float
+            if (valorNodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"      // x1 = dirección de la variable
+                    "    ldr d0, [x1]\n"     // d0 = valor de la variable
+                    "    ldr x0, =%s\n"      // x0 = formato
+                    "    bl printf\n",
+                    valorNodo->valor, formatoDouble);
+                strcat(codigo, buffer);
+            } else if (valorNodo->tipo == AST_NUMERO) {
+                // Si es un literal, crea una constante en .rodata
+                char nombreConst[64];
+                snprintf(nombreConst, sizeof(nombreConst), "double_const_%d", gen->admin_registros->contador_constantes++);
+                insertarConstanteDoubleRoData(gen, nombreConst, atof(valorNodo->valor));
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldr d0, [x1]\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    nombreConst, formatoDouble);
+                strcat(codigo, buffer);
+            }
+
+        }else if (tipo == TIPO_VECTOR && valorNodo->tipo == AST_IDENTIFICADOR) {
             TipoDato tipoBase = obtenerTipoBaseVector(astGlobal, valorNodo->valor);
             int tam = getVectorSize(astGlobal, valorNodo->valor);
             if (tam <= 0) tam = 1;

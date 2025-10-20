@@ -3,7 +3,6 @@
 #include "../InstruccionesNorm_arm64/declaraciones_arm64.h"
 #include "../../semantico/tipos.h"
 
-
 void generarDeclaracionVectorARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     if (!gen || !nodo || nodo->tipo != AST_DECLARACION_VECTOR) return;
 

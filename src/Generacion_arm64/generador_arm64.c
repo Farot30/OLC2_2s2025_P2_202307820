@@ -12,6 +12,7 @@
 #include "InstruccionesSent_arm64/while_arm64.h"
 #include "InstruccionesSent_arm64/Break_continue_arm64.h"
 #include "Vectores_arm64/declaracionesVec_arm64.h"
+#include "Embebidas/String_valueOf.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -113,6 +114,13 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
         perror("Error al abrir archivo ARM64");
         return;
     }
+
+    crearArchivoStringValueOfInt("String_valueOfint.s");
+    crearArchivoStringValueOfBool("String_valueOfbool.s");
+    crearArchivoStringValueOffloat("String_valueOffloat.s");
+    crearArchivoStringValueOfDouble("String_valueOfdouble.s");
+    crearArchivoValueLong("String_valueOflong.s");
+
     
     // Inicializar buffer
     gen->buffer_size = 8192; // Aumentar tamaño inicial
@@ -145,6 +153,11 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
         "// Código ARM64 generado por JavaLang Compiler\n"
         ".global _start\n"
         ".extern itoa\n"
+        ".extern valuesOf_int\n"
+        ".extern valueOf_bool\n"
+        ".extern valueOf_float\n"
+        ".extern valueOf_double\n"
+        ".extern valueOf_long\n"
         ".extern printf\n\n"
         "\n// declaraciones de variables\n"
         ".data\n"

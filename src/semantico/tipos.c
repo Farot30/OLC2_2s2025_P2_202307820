@@ -200,7 +200,12 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
 
     switch (expr->tipo) {
         case AST_NUMERO:
-            if (strchr(expr->valor, '.')) return TIPO_DOUBLE;
+            if (strchr(expr->valor, '.')) {
+                size_t len = strlen(expr->valor);
+                if (len > 0 && (expr->valor[len-1] == 'f' || expr->valor[len-1] == 'F'))
+                    return TIPO_FLOAT;
+                return TIPO_DOUBLE;
+            }
             return TIPO_INT;
         case AST_CADENA:
         case AST_STRING:
@@ -209,9 +214,21 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
             return TIPO_CHAR;
         case AST_BOOLEAN:
             return TIPO_BOOLEAN;
-        case AST_IDENTIFICADOR:
-            // Buscar tipo en el AST
-            return buscarTipoIdentificadorAST(expr->valor, raizAST);
+        case AST_IDENTIFICADOR: {
+            TipoDato tipoDeducido = buscarTipoIdentificadorAST(expr->valor, raizAST);
+            if (tipoDeducido != TIPO_DESCONOCIDO) {
+                printf("[DEBUG TIPO] Identificador: %s, tipo deducido (AST): %d\n", expr->valor, tipoDeducido);
+                return tipoDeducido;
+            }
+            // Buscar en la tabla de símbolos (variables y constantes)
+            Simbolo* sim = buscarSimbolo(expr->valor);
+            if (sim) {
+                printf("[DEBUG TIPO] Identificador: %s, tipo deducido (tabla): %d\n", expr->valor, sim->tipo);
+                return sim->tipo;
+            }
+            printf("[DEBUG TIPO] Identificador: %s, tipo deducido: %d\n", expr->valor, TIPO_DESCONOCIDO);
+            return TIPO_DESCONOCIDO;
+        }
         case AST_OPERACION: {
             if (expr->num_hijos != 2) return TIPO_DESCONOCIDO;
             // --- CORRECCIÓN: Si es concatenación y uno es string, retorna string ---

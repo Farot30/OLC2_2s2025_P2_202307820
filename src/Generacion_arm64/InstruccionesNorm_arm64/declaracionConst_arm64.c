@@ -58,14 +58,6 @@ void agregarCodigoAlBufferConstantes(GeneradorConstantesARM64* gen, const char* 
     }
 }
 
-void generarSeccionRoData(GeneradorConstantesARM64* gen) {
-    const char* seccion_rodata = "// constantes\n.section .rodata\n";
-    if (gen->archivo) {
-        fprintf(gen->archivo, "%s", seccion_rodata);
-    }
-    agregarCodigoAlBufferConstantes(gen, seccion_rodata);
-}
-
 void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, bool* seccion_rodata_iniciada) {
     if (!gen || !nodo || !seccion_rodata_iniciada) {
         printf("[DEBUG] Nodo inválido o tipo incorrecto en generarDeclaracionConstante\n");
@@ -98,30 +90,41 @@ void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, b
     char valorStr[64] = "0";
     if (valorNodo && valorNodo->valor) {
         if (tipo == TIPO_BOOLEAN) {
-            // Convertir "true" o "false" a 1 o 0
             if (strcmp(valorNodo->valor, "true") == 0) {
                 strncpy(valorStr, "1", sizeof(valorStr));
             } else if (strcmp(valorNodo->valor, "false") == 0) {
                 strncpy(valorStr, "0", sizeof(valorStr));
             }
         } else if (tipo == TIPO_STRING){
-            
             if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor)-1] == '"') {
                 strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
             } else {
                 snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
             }
-        }else if (tipo == TIPO_CHAR) {
-            // Asegurarse de que el carácter esté entre comillas simples
+        } else if (tipo == TIPO_CHAR) {
             if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor)-1] == '\'') {
                 strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
             } else if (strlen(valorNodo->valor) == 1) {
                 snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
             } else {
-                printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreConstante);
-                strncpy(valorStr, "'\\0'", sizeof(valorStr)); // Valor por defecto
+                strncpy(valorStr, "'\\0'", sizeof(valorStr));
             }
-        
+        } else if (tipo == TIPO_FLOAT) {
+            // Quitar la 'f' o 'F' si viene al final
+            strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            valorStr[sizeof(valorStr) - 1] = '\0';
+            size_t len = strlen(valorStr);
+            if (len > 0 && (valorStr[len-1] == 'f' || valorStr[len-1] == 'F')) {
+                valorStr[len-1] = '\0';
+            }
+        } else if (tipo == TIPO_DOUBLE) {
+            // Quitar la 'd', 'D', 'f', 'F' si viene al final
+            strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            valorStr[sizeof(valorStr) - 1] = '\0';
+            size_t len = strlen(valorStr);
+            if (len > 0 && (valorStr[len-1] == 'd' || valorStr[len-1] == 'D' || valorStr[len-1] == 'f' || valorStr[len-1] == 'F')) {
+                valorStr[len-1] = '\0';
+            }
         } else {
             strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
         }
@@ -129,7 +132,7 @@ void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, b
     }
 
     char codigo[512];
-    const char* tipoDeclaracion = "word"; // Valor por defecto
+    const char* tipoDeclaracion = "word";
     if (tipo == TIPO_DOUBLE) {
         tipoDeclaracion = "double";
     } else if (tipo == TIPO_FLOAT) {
@@ -142,8 +145,6 @@ void generarDeclaracionConstante(GeneradorConstantesARM64* gen, NodoAST* nodo, b
         tipoDeclaracion = "asciz";
     }
     snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreConstante, tipoDeclaracion, valorStr);
-
-    printf("[DEBUG] Generando código para constante '%s': %s\n", nombreConstante, codigo);
 
     insertarEnSeccionRoData(gen, codigo);
 

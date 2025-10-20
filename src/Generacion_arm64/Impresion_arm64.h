@@ -6,5 +6,5 @@
 
 // Función principal para generar impresión
 void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo);
-
+bool esVariableAscizImpresion(GeneradorDeclaraciones* gen, const char* nombreVar);
 #endif
