@@ -11,6 +11,8 @@ typedef struct {
     char* buffer;
     size_t buffer_size;
     AdministradorRegistros* admin_registros;
+    bool temp_str_valueof_bss_insertado;
+    int contador_literales_string;
 } GeneradorDeclaraciones;
 
 // Funciones para generar declaraciones ARM64

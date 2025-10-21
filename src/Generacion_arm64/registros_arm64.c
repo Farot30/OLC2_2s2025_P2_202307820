@@ -22,6 +22,7 @@ void inicializarRegistros(AdministradorRegistros* admin) {
     
     admin->contador_temp = 0;
     admin->contador_constantes = 0;
+    admin->contador_formatos = 0;
 }
 
 int obtenerRegistroLibre(AdministradorRegistros* admin) {

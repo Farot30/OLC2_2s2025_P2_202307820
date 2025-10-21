@@ -19,33 +19,93 @@ static bool contieneStringEnOperacion(NodoAST* nodo) {
     return false;
 }
 
+bool esConcatenacionSimple(NodoAST* expr) {
+    if (!expr || expr->tipo != AST_OPERACION || strcmp(expr->valor, "+") != 0) return false;
+    if (expr->num_hijos != 2) return false;
+    TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], astGlobal);
+    TipoDato tipoDer = deducirTipoExprARM64(expr->hijos[1], astGlobal);
+
+    bool izqEsCadena = (expr->hijos[0]->tipo == AST_CADENA) ||
+                       (expr->hijos[0]->tipo == AST_IDENTIFICADOR && tipoIzq == TIPO_STRING);
+    bool derEsCadena = (expr->hijos[1]->tipo == AST_CADENA) ||
+                       (expr->hijos[1]->tipo == AST_IDENTIFICADOR && tipoDer == TIPO_STRING);
+
+    return (izqEsCadena && derEsCadena);
+}
+
 static void insertarSeccionValue(GeneradorDeclaraciones* gen) {
     if (!esVariableAscizImpresion(gen, "temp_str_valueof")) {
         insertarEnSeccionBss(gen, "temp_str_valueof: .skip 32\n");
     }
 }
 
+
 ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, NodoAST* expr, int* regIndex) {
     ResultadoExprEmbebida res = {0};
     if (!expr) return res;
 
+    if (esConcatenacionSimple(expr)) {
+        printf("[DEBUG CONCAT SIMPLE] Se genera printf optimizado\n");
+        char nombreFormato[64];
+        snprintf(nombreFormato, sizeof(nombreFormato), "format_concat_%d", *regIndex);
+
+        char formato[256] = "";
+        if (expr->hijos[0]->tipo == AST_CADENA)
+            snprintf(formato, sizeof(formato), "%s%%s\\n", expr->hijos[0]->valor);
+        else if (expr->hijos[1]->tipo == AST_CADENA)
+            snprintf(formato, sizeof(formato), "%%s%s\\n", expr->hijos[1]->valor);
+        else
+            snprintf(formato, sizeof(formato), "%%s%%s\\n");
+
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%s\"\n", nombreFormato, formato);
+        insertarEnSeccionData(gen, buffer);
+
+        ResultadoExprEmbebida resStrIzq = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+        ResultadoExprEmbebida resStrDer = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
+
+        if (expr->hijos[0]->tipo == AST_IDENTIFICADOR && expr->hijos[1]->tipo == AST_IDENTIFICADOR) {
+            snprintf(res.codigo, sizeof(res.codigo),
+                "    ldr x1, =%s\n"
+                "    ldr x1, [x1]\n"
+                "    ldr x2, =%s\n"
+                "    ldr x2, [x2]\n"
+                "    ldr x0, =%s\n"
+                "    bl printf\n",
+                resStrIzq.resultado, resStrDer.resultado, nombreFormato);
+        } else {
+            ResultadoExprEmbebida resStr = (expr->hijos[0]->tipo == AST_IDENTIFICADOR || expr->hijos[0]->tipo == AST_CADENA) ? resStrDer : resStrIzq;
+            snprintf(res.codigo, sizeof(res.codigo),
+                "    ldr x1, =%s\n"
+                "    ldr x1, [x1]\n"
+                "    ldr x0, =%s\n"
+                "    bl printf\n",
+                resStr.resultado, nombreFormato);
+        }
+        strcpy(res.resultado, "");
+        res.tipo = TIPO_STRING;
+        (*regIndex)++;
+        return res;
+    }
+
+    // Concatenación compleja: más de dos partes o anidada
+    if (expr->tipo == AST_OPERACION && contieneStringEnOperacion(expr) && !esConcatenacionSimple(expr) && strcmp(expr->valor, "+") == 0) {
+        // Solo usa StringBuilder si NO es concatenación simple
+        char nombreTemp[64];
+        snprintf(nombreTemp, sizeof(nombreTemp), "__temp_concat_%d", *regIndex);
+        printf("[DEBUG CONCAT COMPLEJA] Generando StringBuilder para variable '%s'\n", nombreTemp);
+        generarConcatenacionStringBuilder(gen, nombreTemp, expr);
+        snprintf(res.codigo, sizeof(res.codigo),
+            "    ldr x%d, =%s\n"
+            "    ldr x%d, [x%d]\n", *regIndex, nombreTemp, *regIndex, *regIndex);
+        snprintf(res.resultado, sizeof(res.resultado), "x%d", *regIndex);
+        res.tipo = TIPO_STRING;
+        (*regIndex)++;
+        return res;
+    }
     // 1. Operaciones aritméticas o concatenación
     if (expr->tipo == AST_OPERACION) {
-        if (contieneStringEnOperacion(expr)) {
-            // --- CONCATENACIÓN ---
-            // Aquí deberías llamar a tu función real de concatenación ARM64
-            // Por ejemplo, usando StringBuilder:
-            char nombreTemp[64];
-            snprintf(nombreTemp, sizeof(nombreTemp), "__temp_concat_%d", *regIndex);
-            generarConcatenacionStringBuilder(gen, nombreTemp, expr);
-            snprintf(res.codigo, sizeof(res.codigo),
-                "    ldr x%d, =%s\n"
-                "    ldr x%d, [x%d]\n", *regIndex, nombreTemp, *regIndex, *regIndex);
-            snprintf(res.resultado, sizeof(res.resultado), "x%d", *regIndex);
-            res.tipo = TIPO_STRING;
-            (*regIndex)++;
-            return res;
-        } else {
+
             // --- OPERACIÓN ARITMÉTICA ---
             char buffer[256];
             ResultadoExprEmbebida izq = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
@@ -55,23 +115,158 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
             int regRes = *regIndex;
             // Puedes mejorar esto para soportar otros operadores
             if (strcmp(expr->valor, "+") == 0)
-                snprintf(buffer, sizeof(buffer), "    add w%d, %s, %s\n", regRes, izq.resultado, der.resultado);
+                snprintf(buffer, sizeof(buffer), "    add w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
             else if (strcmp(expr->valor, "-") == 0)
-                snprintf(buffer, sizeof(buffer), "    sub w%d, %s, %s\n", regRes, izq.resultado, der.resultado);
+                snprintf(buffer, sizeof(buffer), "    sub w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
             else if (strcmp(expr->valor, "*") == 0)
-                snprintf(buffer, sizeof(buffer), "    mul w%d, %s, %s\n", regRes, izq.resultado, der.resultado);
+                snprintf(buffer, sizeof(buffer), "    mul w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
             else if (strcmp(expr->valor, "/") == 0)
-                snprintf(buffer, sizeof(buffer), "    sdiv w%d, %s, %s\n", regRes, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "%") == 0)
-                snprintf(buffer, sizeof(buffer), "    srem w%d, %s, %s\n", regRes, izq.resultado, der.resultado);
-            else 
+                snprintf(buffer, sizeof(buffer), "    sdiv w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, "%") == 0) {
+                // ARM64: a % b = a - (a / b) * b
+                // Usamos w1 para a, w2 para b, w3 para resultado
+                snprintf(buffer, sizeof(buffer),
+                    "    udiv w3, %s, %s\n"   // w3 = a / b
+                    "    msub w1, w3, %s, %s\n", // w1 = a - (a / b) * b
+                    izq.resultado, der.resultado, der.resultado, izq.resultado);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w1");
+                res.tipo = TIPO_INT;
+                (*regIndex)++;
+                return res;
+            }else if (strcmp(expr->valor, "&") == 0)
+                snprintf(buffer, sizeof(buffer), "    and w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, "|") == 0)
+                snprintf(buffer, sizeof(buffer), "    orr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, "^") == 0)
+                snprintf(buffer, sizeof(buffer), "    eor w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, "<<") == 0)
+                snprintf(buffer, sizeof(buffer), "    lsl w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, ">>") == 0)
+                snprintf(buffer, sizeof(buffer), "    lsr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+            else if (strcmp(expr->valor, "==") == 0) {
+                if (izq.tipo == TIPO_STRING && der.tipo == TIPO_STRING) {
+                    char buffer[256];
+                    snprintf(buffer, sizeof(buffer),
+                        "    mov x0, %s\n"
+                        "    mov x1, %s\n"
+                        "    bl strcmp\n"
+                        "    cmp w0, #0\n"
+                        "    cset w%d, %s\n",
+                        izq.resultado, der.resultado, *regIndex,
+                        (strcmp(expr->valor, "==") == 0) ? "eq" : "ne");
+                    strcat(res.codigo, buffer);
+                    snprintf(res.resultado, sizeof(res.resultado), "w%d", *regIndex);
+                    res.tipo = TIPO_BOOLEAN;
+                    (*regIndex)++;
+                    return res;
+                }
+                    snprintf(buffer, sizeof(buffer),
+                        "    cmp %s, %s\n"
+                        "    cset w%d, eq\n", izq.resultado, der.resultado, regRes-2);
+                    strcat(res.codigo, buffer);
+                    snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                    res.tipo = TIPO_BOOLEAN;
+                    (*regIndex)++;
+                    return res;
+                }
+            else if (strcmp(expr->valor, "!=") == 0) {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, ne\n", izq.resultado, der.resultado, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+            }
+            else if (strcmp(expr->valor, "<") == 0) {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, lt\n", izq.resultado, der.resultado, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }
+            else if (strcmp(expr->valor, "<=") == 0) {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, le\n", izq.resultado, der.resultado, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }
+            else if (strcmp(expr->valor, ">") == 0) {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, gt\n", izq.resultado, der.resultado, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }
+            else if (strcmp(expr->valor, ">=") == 0) {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, ge\n", izq.resultado, der.resultado, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }else if (strcmp(expr->valor, "&&") == 0) {
+                // wA = izq.resultado, wB = der.resultado, wN = resultado
+                snprintf(buffer, sizeof(buffer),
+                    "    and w%d, %s, %s\n"
+                    "    cmp w%d, #0\n"
+                    "    cset w%d, ne\n",
+                    regRes-2, izq.resultado, der.resultado,
+                    regRes-2, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            } else if (strcmp(expr->valor, "||") == 0) {
+                // wA = izq.resultado, wB = der.resultado, wN = resultado
+                snprintf(buffer, sizeof(buffer),
+                    "    orr w%d, %s, %s\n"
+                    "    cmp w%d, #0\n"
+                    "    cset w%d, ne\n",
+                    regRes-2, izq.resultado, der.resultado,
+                    regRes-2, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            } else if (strcmp(expr->valor, "!") == 0) {
+                // wA = resultado del hijo, wN = resultado
+                ResultadoExprEmbebida hijo = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+                strcat(res.codigo, hijo.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, #0\n"
+                    "    cset w%d, eq\n",
+                    hijo.resultado, *regIndex);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w%d", *regIndex);
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }
+            else
                 snprintf(buffer, sizeof(buffer), "    // Operador no soportado: %s\n", expr->valor);
             strcat(res.codigo, buffer);
-            snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
             res.tipo = TIPO_INT; // Puedes deducir el tipo real si lo necesitas
             (*regIndex)++;
             return res;
-        }
+        
     }
 
     // 2. Embebidas: String.valueOf, parseInt, etc.
@@ -89,9 +284,6 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
                 "    bl valueOf_int\n",
                 hijo.resultado);
             strcat(res.codigo, buffer);
-            strcpy(res.resultado, "x0"); // x0 tendrá la dirección del string
-            res.tipo = TIPO_STRING;
-            return res;
         }
         else if(hijo.tipo == TIPO_BOOLEAN) {
             snprintf(buffer, sizeof(buffer),
@@ -149,7 +341,7 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
                 "    ldr x%d, =%s\n"
                 "    ldr s0, [x%d]\n", *regIndex, nombreConst, *regIndex);
             strcat(res.codigo, buffer);
-            snprintf(res.resultado, sizeof(res.resultado), "s0");
+            snprintf(res.resultado, sizeof(res.resultado), "s%d", *regIndex);
             res.tipo = TIPO_FLOAT;
             (*regIndex)++;
             return res;
@@ -174,7 +366,7 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
                 "    ldr x%d, =%s\n"
                 "    ldr d0, [x%d]\n", *regIndex, nombreConst, *regIndex);
             strcat(res.codigo, buffer);
-            snprintf(res.resultado, sizeof(res.resultado), "d0");
+            snprintf(res.resultado, sizeof(res.resultado), "d0%d", *regIndex);
             res.tipo = TIPO_DOUBLE;
             (*regIndex)++;
             return res;
@@ -236,15 +428,13 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
     if (expr->tipo == AST_CADENA) {
         // String literal
         char nombreStr[64];
-        snprintf(nombreStr, sizeof(nombreStr), "str_lit_%d", (*regIndex));
+        snprintf(nombreStr, sizeof(nombreStr), "str_lit_%d", gen->contador_literales_string++);
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%s: .asciz %s\n", nombreStr, expr->valor);
+        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%s\"\n", nombreStr, expr->valor);
         insertarEnSeccionData(gen, buffer);
-        snprintf(buffer, sizeof(buffer), "    ldr x%d, =%s\n", *regIndex, nombreStr);
-        strcat(res.codigo, buffer);
-        snprintf(res.resultado, sizeof(res.resultado), "x%d", *regIndex);
+        res.codigo[0] = '\0'; // No necesitas código para cargar el literal
+        snprintf(res.resultado, sizeof(res.resultado), "%s", nombreStr); // Devuelve el nombre del literal
         res.tipo = TIPO_STRING;
-        (*regIndex)++;
         return res;
     }
     if (expr->tipo == AST_EQUAL) {

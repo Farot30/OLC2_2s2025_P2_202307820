@@ -4,6 +4,7 @@
 #include "../../semantico/tipos.h"
 #include "../../semantico/semantico.h"
 #include "StringBuilder.h"
+#include "../Embebidas/EvaluadorExpr_arm64.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -270,7 +271,17 @@ void generarOperacionGeneral(const char* operador, const char* regResultado, con
         } else if (strcmp(operador, "/") == 0) {
             snprintf(buffer, sizeof(buffer), "    fdiv %s0, %s0, %s1\n", sufijo, sufijo, sufijo);
         } else if (strcmp(operador, "%") == 0) {
-
+            // No hay operador de módulo para float/double en ARM64
+            // Se puede implementar como: a - b * trunc(a / b)
+            snprintf(buffer, sizeof(buffer),
+                "    fdiv %s0, %s0, %s1\n"      // temp = a / b
+                "    frintz %s2, %s0\n"         // temp2 = trunc(temp)
+                "    fmul %s2, %s2, %s1\n"      // temp2 = temp2 * b
+                "    fsub %s0, %s0, %s2\n",     // result = a - temp2
+                sufijo, sufijo, sufijo,
+                sufijo, sufijo,
+                sufijo, sufijo, sufijo,
+                sufijo, sufijo);
         }
         // **OPERADORES DE COMPARACIÓN** (para float/double)
         else if (strcmp(operador, "==") == 0) {
@@ -504,6 +515,20 @@ void generarCodigoRecursivoOperacion(NodoAST* nodo, char* codigoOperacion, int* 
                 snprintf(buffer, sizeof(buffer), "    sdiv w0, w0, w2\n");
             }
             strcat(codigoOperacion, buffer);
+        } else if(strcmp(nodo->valor, "%") == 0) {
+            if (*esPrimera) {
+                snprintf(buffer, sizeof(buffer),
+                    "    sdiv w3, w1, w2\n"
+                    "    mul w3, w3, w2\n"
+                    "    sub w0, w1, w3\n");
+                *esPrimera = 0;
+            } else {
+                snprintf(buffer, sizeof(buffer),
+                    "    sdiv w3, w0, w2\n"
+                    "    mul w3, w3, w2\n"
+                    "    sub w0, w0, w3\n");
+            }
+            strcat(codigoOperacion, buffer);
         }
     }
 }
@@ -608,6 +633,17 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
             snprintf(buffer, sizeof(buffer), "    fmul d0, d%d, d%d\n", regIzq, regDer);
         } else if (strcmp(nodo->valor, "/") == 0) {
             snprintf(buffer, sizeof(buffer), "    fdiv d0, d%d, d%d\n", regIzq, regDer);
+        } else if (strcmp(nodo->valor, "%") == 0) {
+            // Cálculo del módulo para double: a % b = a - (a / b) * b
+            snprintf(buffer, sizeof(buffer),
+                "    fdiv d9, d%d, d%d\n"   // d9 = dIzq / dDer
+                "    frintz d9, d9\n"        // Redondear hacia cero
+                "    fmul d9, d9, d%d\n"     // d9 = (dIzq / dDer) * dDer
+                "    fsub d0, d%d, d9\n",    // d0 = dIzq - d9
+                regIzq, regDer,
+                regDer,
+                regIzq);
+        
         } else if (strcmp(nodo->valor, "==") == 0) {
             snprintf(buffer, sizeof(buffer),
                 "    fcmp d%d, d%d\n"
@@ -1040,6 +1076,10 @@ void generarCodigoRecursivoChar(NodoAST* nodo, char* codigoOperacion, int* regIn
             snprintf(buffer, sizeof(buffer), "    mul w0, w%d, w%d\n", regIzq, regDer);
         } else if (strcmp(nodo->valor, "/") == 0) {
             snprintf(buffer, sizeof(buffer), "    sdiv w0, w%d, w%d\n", regIzq, regDer);
+        } else if(strcmp(nodo->valor, "%") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    sdiv w1, w%d, w%d\n"
+                "    msub w0, w1, w%d, w%d\n", regIzq, regDer, regDer, regIzq);
         } else if (strcmp(nodo->valor, "&") == 0) {
             snprintf(buffer, sizeof(buffer), "    and w0, w%d, w%d\n", regIzq, regDer);
         } else if (strcmp(nodo->valor, "|") == 0) {
@@ -1097,9 +1137,15 @@ void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombre
 
     // **CASO ESPECIAL: CONCATENACIÓN DE STRINGS**
     if (tipoVar == TIPO_STRING && strcmp(operacionNodo->valor, "+") == 0) {
-        printf("[DEBUG] Detectada concatenación de strings para variable '%s'\n", nombreVar);
-        generarConcatenacionStringBuilder(gen, nombreVar, operacionNodo);
-        return;
+        if (!esConcatenacionSimple(operacionNodo)) {
+            printf("[DEBUG] Detectada concatenación COMPLEJA de strings para variable '%s'\n", nombreVar);
+            generarConcatenacionStringBuilder(gen, nombreVar, operacionNodo);
+            return;
+        }
+        // Si es simple, genera printf optimizado aquí o deja que lo maneje el evaluador
+        printf("[DEBUG] Detectada concatenación SIMPLE de strings para variable '%s'\n", nombreVar);
+        // Aquí puedes llamar a tu generador de printf optimizado, o dejar que el evaluador lo maneje
+        // ...
     }
 
     // **RESTO DE OPERACIONES (CÓDIGO EXISTENTE SIMPLIFICADO)**

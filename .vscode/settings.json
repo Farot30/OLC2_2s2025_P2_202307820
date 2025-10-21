@@ -5,6 +5,7 @@
         "declaraciones_arm64.h": "c",
         "asignacion_arm64.h": "c",
         "funcionvoid.h": "c",
-        "for.h": "c"
+        "for.h": "c",
+        "registros_arm64.h": "c"
     }
 }

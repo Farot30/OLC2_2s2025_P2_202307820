@@ -15,5 +15,6 @@ typedef struct {
 
 // Función recursiva principal
 ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, NodoAST* expr, int* regIndex);
+bool esConcatenacionSimple(NodoAST* expr);
 
 #endif

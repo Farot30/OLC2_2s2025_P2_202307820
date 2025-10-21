@@ -220,6 +220,7 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
                 printf("[DEBUG TIPO] Identificador: %s, tipo deducido (AST): %d\n", expr->valor, tipoDeducido);
                 return tipoDeducido;
             }
+            
             // Buscar en la tabla de símbolos (variables y constantes)
             Simbolo* sim = buscarSimbolo(expr->valor);
             if (sim) {
@@ -230,13 +231,22 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
             return TIPO_DESCONOCIDO;
         }
         case AST_OPERACION: {
-            if (expr->num_hijos != 2) return TIPO_DESCONOCIDO;
+            if (strcmp(expr->valor, "!") == 0 && expr->num_hijos == 1) {
+                TipoDato hijoTipo = deducirTipoExprARM64(expr->hijos[0], raizAST);
+                if (hijoTipo == TIPO_BOOLEAN) return TIPO_BOOLEAN;
+                return TIPO_DESCONOCIDO;
+            }
             // --- CORRECCIÓN: Si es concatenación y uno es string, retorna string ---
             if (strcmp(expr->valor, "+") == 0) {
                 TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], raizAST);
                 TipoDato tipoDer = deducirTipoExprARM64(expr->hijos[1], raizAST);
                 if (tipoIzq == TIPO_STRING || tipoDer == TIPO_STRING) return TIPO_STRING;
                 // Si ambos son char, también puede considerarse string (opcional)
+            }
+
+            if (strcmp(expr->valor, "&&") == 0 ||
+                strcmp(expr->valor, "||") == 0) {
+                return TIPO_BOOLEAN;
             }
             // Resto de operaciones aritméticas
             TipoDato tipoIzq = deducirTipoExprARM64(expr->hijos[0], raizAST);

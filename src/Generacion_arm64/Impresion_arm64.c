@@ -2,13 +2,13 @@
 #include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
 #include "InstruccionesNorm_arm64/Operadores_arm64.h"
 #include "EscapeSecuencia_arm64.h" 
+#include "Embebidas/EvaluadorExpr_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
 bool linea_vacia = false;
 extern NodoAST* astGlobal;
 
-// Función para insertar las constantes str_true y str_false en la sección .data
 
 
 // **ESTRUCTURAS PARA ANÁLISIS DE CONCATENACIÓN EN PRINTS**
@@ -18,23 +18,8 @@ typedef struct {
     TipoDato tipo;
 } ParteConcatenacion;
 
-// **FUNCIÓN RECURSIVA PARA RECOLECTAR PARTES DE CONCATENACIÓN**
-static void recolectarPartesConcatenacion(NodoAST* nodo, ParteConcatenacion* partes, int* numPartes, int maxPartes) {
-    if (!nodo || *numPartes >= maxPartes) return;
-    printf("[DEBUG CONCAT] Parte: tipo=%d, valor=%s, deducido=%d\n", nodo->tipo, nodo->valor ? nodo->valor : "(null)", partes[*numPartes].tipo);
-    if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "+") == 0 && nodo->num_hijos == 2) {
-        // Concatenación: procesar recursivamente izquierda y derecha
-        recolectarPartesConcatenacion(nodo->hijos[0], partes, numPartes, maxPartes);
-        recolectarPartesConcatenacion(nodo->hijos[1], partes, numPartes, maxPartes);
-    } else {
-        // Nodo hoja: agregar a las partes
-        partes[*numPartes].nodo = nodo;
-        partes[*numPartes].tipo = deducirTipoExprARM64(nodo, astGlobal);
-        
-        (*numPartes)++;
-    }
-}
-
+static void recolectarPartesRecursivas(NodoAST* nodo, ParteConcatenacion* partes, int* numPartes);
+static bool procesarParteParaFormato(GeneradorDeclaraciones* gen, ParteConcatenacion* parte, char* formato, char* codigoArgs, int* regIndex);
 
 
 bool esVariableAscizImpresion(GeneradorDeclaraciones* gen, const char* nombreVar) {
@@ -73,170 +58,55 @@ bool esVariableAscizImpresion(GeneradorDeclaraciones* gen, const char* nombreVar
     return false;
 }
 
-static void insertarConstantesBooleanas(GeneradorDeclaraciones* gen) {
-    if (!esVariableAscizImpresion(gen, "str_true")) {
-        insertarEnSeccionData(gen, "str_true: .asciz \"true\"\n");
+static void escaparPorcentaje(char* destino, const char* origen, size_t tam) {
+    size_t j = 0;
+    for (size_t i = 0; origen[i] != '\0' && j < tam - 1; i++) {
+        if (origen[i] == '%') {
+            // Si el siguiente caracter es una letra de formato, NO escapamos
+            char next = origen[i+1];
+            if (next == 'd' || next == 's' || next == 'f' || next == 'c') {
+                destino[j++] = '%';
+            } else {
+                // Escapamos solo si no es un especificador
+                if (j < tam - 2) {
+                    destino[j++] = '%';
+                    destino[j++] = '%';
+                }
+            }
+        } else {
+            destino[j++] = origen[i];
+        }
     }
-    if (!esVariableAscizImpresion(gen, "str_false")) {
-        insertarEnSeccionData(gen, "str_false: .asciz \"false\"\n");
-    }
-    if(!esVariableAscizImpresion(gen, "__temp_print_str")){
-        insertarEnSeccionBss(gen, "__temp_print_str: .skip 8\n");
-    }
-}
-static bool contieneStringEnOperacion(NodoAST* nodo) {
-    if (!nodo) return false;
-    TipoDato tipo = deducirTipoExprARM64(nodo, astGlobal);
-    
-    if (tipo == TIPO_STRING) return true;
-    for (int i = 0; i < nodo->num_hijos; i++) {
-        if (contieneStringEnOperacion(nodo->hijos[i])) return true;
-    }
-    return false;
+    destino[j] = '\0';
 }
 
-// **FUNCIÓN PARA GENERAR PRINTF OPTIMIZADO DESDE CONCATENACIÓN**
-static bool generarPrintfDesdeConcatenacion(GeneradorDeclaraciones* gen, NodoAST* valorNodo, char* codigo) {
-    ParteConcatenacion partes[MAX_PARTES_CONCAT];
-    int numPartes = 0;
+
+static void insertarConstantesBooleanas(GeneradorDeclaraciones* gen) {
+    if (!gen->temp_str_valueof_bss_insertado) {
+        insertarEnSeccionBss(gen, "temp_str_valueof: .skip 32\n");
+        gen->temp_str_valueof_bss_insertado = true;
+    }
+}
+
+
+// En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
+static bool esConcatenacionConStringValof(NodoAST* nodo) {
+    if (!nodo || nodo->tipo != AST_OPERACION || strcmp(nodo->valor, "+") != 0) 
+        return false;
     
-    // Recolectar todas las partes de la concatenación
-    recolectarPartesConcatenacion(valorNodo, partes, &numPartes, MAX_PARTES_CONCAT);
-    
-    if (numPartes == 0) return false;
-    
-    // Construir el formato dinámicamente
-    char formato[512] = "";
-    int numArgs = 0;
-    
-    for (int i = 0; i < numPartes; i++) {
-        NodoAST* parte = partes[i].nodo;
-        TipoDato tipo = partes[i].tipo;
-        
-        if (tipo == TIPO_STRING && parte->tipo == AST_CADENA) {
-            // String literal: agregar directamente al formato
-            strcat(formato, parte->valor);
-        } else if (tipo == TIPO_INT) {
-            strcat(formato, "%d");
-            numArgs++;
-        } else if (tipo == TIPO_FLOAT) {
-            strcat(formato, "%f");
-            numArgs++;
-        } else if(tipo == TIPO_DOUBLE){
-            strcat(formato, "%f");
-            numArgs++;
-        } else if (tipo == TIPO_CHAR) {
-            strcat(formato, "%c");
-            numArgs++;
-        } else if (tipo == TIPO_BOOLEAN) {
-            strcat(formato, "%s");  // Usaremos "true"/"false"
-            numArgs++;
-        } else if (tipo == TIPO_STRING && parte->tipo == AST_IDENTIFICADOR) {
-            strcat(formato, "%s");
-            numArgs++;
-        } else {
-            // Tipo no soportado: usar StringBuilder
-            printf("[DEBUG PRINTF] Tipo no soportado en concatenación: tipo=%d, valor=%s\n", tipo, parte->valor ? parte->valor : "(null)");
-            return false;
+    // Verificar si algún lado tiene String.valueOf o es string
+    for (int i = 0; i < nodo->num_hijos; i++) {
+        NodoAST* hijo = nodo->hijos[i];
+        if (hijo->tipo == AST_VALUEOF || 
+            deducirTipoExprARM64(hijo, astGlobal) == TIPO_STRING) {
+            return true;
+        }
+        // Recursivo para concatenaciones anidadas
+        if (esConcatenacionConStringValof(hijo)) {
+            return true;
         }
     }
-    
-    // Agregar salto de línea al final
-    strcat(formato, "\\n");
-    
-    // Crear constante para el formato
-    char nombreFormato[64];
-    char buffer[512];
-    snprintf(nombreFormato, sizeof(nombreFormato), "format_concat_%d", gen->admin_registros->contador_constantes++);
-    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%s\"\n", nombreFormato, formato);
-    insertarEnSeccionData(gen, buffer);
-    
-    // Generar código para cargar argumentos
-    snprintf(buffer, sizeof(buffer), "    // Printf optimizado para concatenación\n");
-    strcat(codigo, buffer);
-    
-    int regIndex = 1; // x1, x2, x3, ...
-    for (int i = 0; i < numPartes; i++) {
-        NodoAST* parte = partes[i].nodo;
-        TipoDato tipo = partes[i].tipo;
-        
-        // Saltar strings literales (ya están en el formato)
-        if (tipo == TIPO_STRING && parte->tipo == AST_CADENA) continue;
-        
-        if (tipo == TIPO_INT) {
-            if (parte->tipo == AST_IDENTIFICADOR) {
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n"
-                    "    ldr w%d, [x%d]\n",
-                    regIndex, parte->valor, regIndex, regIndex);
-            } else if (parte->tipo == AST_NUMERO) {
-                snprintf(buffer, sizeof(buffer),
-                    "    mov w%d, #%s\n",
-                    regIndex, parte->valor);
-            }
-            strcat(codigo, buffer);
-            regIndex++;
-        } else if (tipo == TIPO_FLOAT || tipo == TIPO_DOUBLE) {
-            if (parte->tipo == AST_IDENTIFICADOR) {
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n"
-                    "    ldr d%d, [x%d]\n",
-                    regIndex, parte->valor, regIndex - 1, regIndex);
-            }
-            strcat(codigo, buffer);
-            regIndex++;
-        } else if (tipo == TIPO_CHAR) {
-            if (parte->tipo == AST_IDENTIFICADOR) {
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n"
-                    "    ldrb w%d, [x%d]\n",
-                    regIndex, parte->valor, regIndex, regIndex);
-            } else if (parte->tipo == AST_CARACTER) {
-                snprintf(buffer, sizeof(buffer),
-                    "    mov w%d, #%d\n",
-                    regIndex, (int)parte->valor[0]);
-            }
-            strcat(codigo, buffer);
-            regIndex++;
-        } else if (tipo == TIPO_BOOLEAN) {
-            insertarConstantesBooleanas(gen);
-            // Cargar "true" o "false" según el valor
-            if (parte->tipo == AST_IDENTIFICADOR) {
-                // Necesitamos convertir 0/1 a "false"/"true"
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n"
-                    "    ldrb w%d, [x%d]\n"
-                    "    cmp w%d, #0\n"
-                    "    ldr x%d, =str_false\n"
-                    "    ldr x19, =str_true\n"
-                    "    csel x%d, x19, x%d, ne\n",
-                    regIndex, parte->valor, regIndex, regIndex, regIndex, regIndex, regIndex, regIndex);
-            } else if (parte->tipo == AST_BOOLEAN) {
-                const char* strBool = (strcmp(parte->valor, "true") == 0) ? "str_true" : "str_false";
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n",
-                    regIndex, strBool);
-            }
-            strcat(codigo, buffer);
-            regIndex++;
-        } else if (tipo == TIPO_STRING && parte->tipo == AST_IDENTIFICADOR) {
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x%d, =%s\n"
-                "    ldr x%d, [x%d]\n",
-                regIndex, parte->valor, regIndex, regIndex);
-            strcat(codigo, buffer);
-            regIndex++;
-        }
-    }
-    
-    // Cargar formato y llamar a printf
-    snprintf(buffer, sizeof(buffer),
-        "    ldr x0, =%s\n"
-        "    bl printf\n",
-        nombreFormato);
-    strcat(codigo, buffer);
-    
-    return true;
+    return false;
 }
 
 
@@ -267,54 +137,245 @@ int getVectorSize(NodoAST* raiz, const char* nombre) {
     return 0;
 }
 
-// Función para procesar operaciones recursivamente
-static void procesarOperacionRecursiva(GeneradorDeclaraciones* gen, NodoAST* nodo, char* codigo, int* regIndex) {
-    if (!nodo) return;
-
-    char buffer[256];
-
-    if (nodo->tipo == AST_OPERACION && nodo->num_hijos == 2) {
-        NodoAST* izq = nodo->hijos[0];
-        NodoAST* der = nodo->hijos[1];
-
-        // Procesar recursivamente los operandos
-        procesarOperacionRecursiva(gen, izq, codigo, regIndex);
-        int regIzq = *regIndex - 1;
-        procesarOperacionRecursiva(gen, der, codigo, regIndex);
-        int regDer = *regIndex - 1;
-
-        // Generar código para la operación
-        if (strcmp(nodo->valor, "+") == 0) {
-            snprintf(buffer, sizeof(buffer), "    add w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
-        } else if (strcmp(nodo->valor, "-") == 0) {
-            snprintf(buffer, sizeof(buffer), "    sub w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
-        } else if (strcmp(nodo->valor, "*") == 0) {
-            snprintf(buffer, sizeof(buffer), "    mul w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
-        } else if (strcmp(nodo->valor, "/") == 0) {
-            snprintf(buffer, sizeof(buffer), "    sdiv w%d, w%d, w%d\n", *regIndex, regIzq, regDer);
+// En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
+static bool generarConcatenacionOptimizada(GeneradorDeclaraciones* gen, NodoAST* valorNodo, char* codigo) {
+    // Recolectar todas las partes usando evaluador recursivo
+    ParteConcatenacion partes[MAX_PARTES_CONCAT];
+    int numPartes = 0;
+    
+    recolectarPartesRecursivas(valorNodo, partes, &numPartes);
+    
+    if (numPartes == 0) return false;
+    
+    // Construir formato dinámico
+    char formato[512] = "";
+    char codigoArgs[1024] = "";
+    int regIndex = 1;
+    
+    for (int i = 0; i < numPartes; i++) {
+        if (!procesarParteParaFormato(gen, &partes[i], formato, codigoArgs, &regIndex)) {
+            printf("[DEPURACION] Concatenación NO soportada, no se imprime: formato=%s, args=%s\n", formato, codigoArgs);
+            return false; // Activar StringBuilder como fallback
         }
-        strcat(codigo, buffer);
-        (*regIndex)++;
-    } else if (nodo->tipo == AST_NUMERO) {
-        // Cargar un número literal
-        snprintf(buffer, sizeof(buffer), "    mov w%d, #%s\n", *regIndex, nodo->valor);
-        strcat(codigo, buffer);
-        (*regIndex)++;
-    } else if (nodo->tipo == AST_IDENTIFICADOR) {
-        // Cargar el valor de una variable
-        snprintf(buffer, sizeof(buffer),
-            "    ldr x%d, =%s\n"
-            "    ldr w%d, [x%d]\n",
-            *regIndex, nodo->valor, *regIndex, *regIndex);
-        strcat(codigo, buffer);
-        (*regIndex)++;
-    } else if (nodo->tipo == AST_CARACTER) {
-        // Cargar el valor ASCII del carácter en el registro actual
-        snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", *regIndex, (int)nodo->valor[0]);
-        strcat(codigo, buffer);
-        (*regIndex)++;
+    }
+    
+    strcat(formato, "\\n");
+
+    char formatoEscapado[512];
+    escaparPorcentaje(formatoEscapado, formato, sizeof(formatoEscapado));
+    
+    // Crear formato y generar código
+    char nombreFormato[64];
+    snprintf(nombreFormato, sizeof(nombreFormato), "format_concat_%d", gen->admin_registros->contador_formatos++);
+    
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%s\"\n", nombreFormato, formatoEscapado);
+    insertarEnSeccionData(gen, buffer);
+    
+    // Código final
+    strcat(codigo, "    // Printf optimizado para concatenación\n");
+    strcat(codigo, codigoArgs);
+    snprintf(buffer, sizeof(buffer), "    ldr x0, =%s\n    bl printf\n", nombreFormato);
+    strcat(codigo, buffer);
+    
+    printf("[DEBUG] Printf optimizado generado para concatenación\n");
+    printf("[DEPURACION] Concatenación soportada, se imprime: formato=%s, args=%s\n", formato, codigoArgs);
+    return true;
+}
+
+// En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
+static void recolectarPartesRecursivas(NodoAST* nodo, ParteConcatenacion* partes, int* numPartes) {
+    if (!nodo || *numPartes >= MAX_PARTES_CONCAT) return;
+    
+    if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "+") == 0) {
+        // Si es concatenación, procesar ambos lados recursivamente
+        for (int i = 0; i < nodo->num_hijos; i++) {
+            recolectarPartesRecursivas(nodo->hijos[i], partes, numPartes);
+        }
+    } else {
+        // Nodo hoja: literal, variable, o String.valueOf(expr)
+        TipoDato tipo;
+        
+        if (nodo->tipo == AST_VALUEOF && nodo->num_hijos == 1) {
+            tipo = deducirTipoExprARM64(nodo->hijos[0], astGlobal);
+            printf("[DEBUG CONCAT] Parte: tipo=%d, valor=%s, deducido=%d\n", nodo->tipo, nodo->valor ? nodo->valor : "(null)", tipo);
+            if (tipo == TIPO_BOOLEAN) {
+                partes[*numPartes].nodo = nodo;
+                partes[*numPartes].tipo = TIPO_BOOLEAN;
+                (*numPartes)++;
+                printf("[DEBUG CONCAT] Parte: tipo=%d, valor=%s, deducido=%d (forzado BOOL)\n", 
+                    nodo->tipo, nodo->valor ? nodo->valor : "(null)", TIPO_BOOLEAN);
+                return;
+            }
+        } else {
+            tipo = deducirTipoExprARM64(nodo, astGlobal);
+        }
+        
+        partes[*numPartes].nodo = nodo;
+        partes[*numPartes].tipo = tipo;
+        (*numPartes)++;
+        
+        printf("[DEBUG CONCAT] Parte: tipo=%d, valor=%s, deducido=%d\n", 
+               nodo->tipo, nodo->valor ? nodo->valor : "(null)", tipo);
     }
 }
+
+// En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
+static bool procesarParteParaFormato(GeneradorDeclaraciones* gen, ParteConcatenacion* parte, 
+                                   char* formato, char* codigoArgs, int* regIndex) {
+    NodoAST* nodo = parte->nodo;
+    TipoDato tipo = parte->tipo;
+    char buffer[256];
+    printf("[DEBUG] procesarParteParaFormato: nodo tipo=%d, valor=%s, tipo deducido=%d\n",
+       nodo->tipo, nodo->valor ? nodo->valor : "(null)", tipo);
+
+
+    // 1. STRING LITERAL
+    if (tipo == TIPO_STRING && nodo->tipo == AST_CADENA) {
+        strcat(formato, nodo->valor);
+        return true;
+    }
+
+    if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "!") == 0) {
+        // Es una negación booleana
+        strcat(formato, "%d"); // O "%s" si quieres "true"/"false"
+        ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoArgs, resultado.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov w1, %s\n", resultado.resultado);
+        strcat(codigoArgs, buffer);
+        return true;
+    }
+    
+    // 2. STRING.VALUEOF(EXPR)
+    if (nodo->tipo == AST_VALUEOF && nodo->num_hijos == 1) {
+        // Evaluar expresión recursivamente
+        ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
+        strcat(codigoArgs, resultado.codigo);
+        
+        if (tipo == TIPO_INT) {
+            strcat(formato, "%d");
+            snprintf(buffer, sizeof(buffer), "    mov w1, %s\n", resultado.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+        } else if (tipo == TIPO_DOUBLE) {
+            strcat(formato, "%f");
+            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", *regIndex - 1, resultado.resultado);
+        } else if( tipo == TIPO_FLOAT) {
+            strcat(formato, "%f");
+            snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", *regIndex - 2, *regIndex - 2);
+        } if (tipo == TIPO_CHAR) {
+            strcat(formato, "%c");
+            // Cargar el valor del char en w1
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x1, =%s\n"
+                "    ldrb w1, [x1]\n",
+                nodo->valor);
+        } 
+        else if( tipo == TIPO_BOOLEAN) {
+            insertarConstantesBooleanas(gen);
+            strcat(formato, "%s");
+            snprintf(buffer, sizeof(buffer),
+                "    mov w0, %s\n"
+                "    ldr x1, =temp_str_valueof\n"
+                "    bl valueOf_bool\n"
+                "    ldr x1, =temp_str_valueof\n",
+                resultado.resultado);
+        } else if (tipo == TIPO_STRING) {
+            strcat(formato, "%s");
+            snprintf(buffer, sizeof(buffer), "    mov x%d, %s\n", *regIndex - 1, resultado.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+        } else {
+            printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return false; // Tipo no soportado para String.valueOf
+        }
+        strcat(codigoArgs, buffer);
+        printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+        return true;
+    }
+    
+    // 3. OTROS TIPOS (int, float, string variables, etc.)
+    switch (tipo) {
+        case TIPO_INT:
+            strcat(formato, "%d");
+            // Usar generarExprEmbebidaARM64 para cualquier expresión int
+            ResultadoExprEmbebida resInt = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resInt.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex - 1, resInt.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+            
+        case TIPO_FLOAT:
+            strcat(formato, "%f");
+            ResultadoExprEmbebida resFloat = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resFloat.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov d%d, %s\n", *regIndex - 1, resFloat.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+        
+        case TIPO_DOUBLE:
+            strcat(formato, "%f");
+            ResultadoExprEmbebida resDouble = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resDouble.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", *regIndex - 1, resDouble.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+        case TIPO_CHAR:
+            strcat(formato, "%c");
+            ResultadoExprEmbebida resChar = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resChar.codigo);
+
+            // Si el resultado es un registro (ejemplo: resChar.resultado == "w1")
+            snprintf(buffer, sizeof(buffer),
+                "    mov w1, %s\n", resChar.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+            
+        case TIPO_STRING:
+            if (nodo->tipo == AST_IDENTIFICADOR || nodo->tipo == AST_CADENA) {
+                strcat(formato, "%s");
+               ResultadoExprEmbebida resStr = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resStr.codigo);
+                // Solo agrega el bloque de carga si resStr.codigo está vacío (es decir, si no se generó ya)
+                if (resStr.codigo[0] == '\0') {
+                    snprintf(buffer, sizeof(buffer),
+                        "    ldr x1, =%s\n"
+                        "    ldr x1, [x1]\n",
+                        resStr.resultado);
+                    strcat(codigoArgs, buffer);
+                }
+                printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+                return true;
+            }
+            printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return false;
+        case TIPO_BOOLEAN:
+            insertarConstantesBooleanas(gen);
+            strcat(formato, "%d");
+            ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resultado.codigo);
+            snprintf(buffer, sizeof(buffer),
+                "    mov w0, %s\n"
+                "    ldr x1, =temp_str_valueof\n"
+                "    bl valueOf_bool\n"
+                "    ldr x1, =temp_str_valueof\n",
+                resultado.resultado);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
+        default:
+        printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return false; // Tipo no soportado
+    }
+}
+
+bool esConcatenacion = false;
 
 // Función para generar impresión en ARM64 utilizando printf
 void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
@@ -344,75 +405,42 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
 
         // **PRIORIDAD 1: Si es concatenación, intentar generar printf optimizado**
         if (valorNodo->tipo == AST_OPERACION && strcmp(valorNodo->valor, "+") == 0) {
-            if (contieneStringEnOperacion(valorNodo)) {
-                // Concatenación de strings (usa tu lógica actual)
-                if (generarPrintfDesdeConcatenacion(gen, valorNodo, codigo)) {
-                    printf("[DEBUG] Printf optimizado generado para concatenación\n");
-                } else {
-                    insertarConstantesBooleanas(gen);
-                    // Fallback a StringBuilder si no se puede optimizar
-                    printf("[DEBUG] Fallback a StringBuilder para concatenación compleja\n");
-                    const char* nombreTemp = "__temp_print_str";
-                    generarConcatenacionStringBuilder(gen, nombreTemp, valorNodo);
-                    char formatoConst[64];
-                    snprintf(formatoConst, sizeof(formatoConst), "format_string_%d", gen->admin_registros->contador_constantes++);
-                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoConst);
-                    insertarEnSeccionData(gen, buffer);
-                    snprintf(buffer, sizeof(buffer),
-                        "    ldr x1, =%s\n"
-                        "    ldr x1, [x1]\n"
-                        "    ldr x0, =%s\n"
-                        "    bl printf\n",
-                        nombreTemp, formatoConst);
-                    strcat(codigo, buffer);
+            if (esConcatenacionConStringValof(valorNodo)) {
+                if (generarConcatenacionOptimizada(gen, valorNodo, codigo)) {
+                    printf("[DEPURACION] Insertando impresión ARM64: \n%s\n", codigo);
+                    insertarEnSeccionText(gen, codigo);
+                    return;
                 }
-            } else {
-                // Operación aritmética (suma de números, chars, etc.)
-                int regIndex = 1;
-                procesarOperacionRecursiva(gen, valorNodo, codigo, &regIndex);
-                char formatoInt[64];
-                snprintf(formatoInt, sizeof(formatoInt), "format_int_%d", gen->admin_registros->contador_constantes++);
-                snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoInt);
-                insertarEnSeccionData(gen, buffer);
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x0, =%s\n"
-                    "    mov w1, w%d\n"
-                    "    bl printf\n",
-                    formatoInt, regIndex - 1);
-                strcat(codigo, buffer);
             }
-
-        } else if (tipo == TIPO_STRING) {
-            // String simple (no concatenación)
+        }
+        // PRIORIDAD 2: String simple
+        else if (tipo == TIPO_STRING) {
             char formatoConst[64];
             snprintf(formatoConst, sizeof(formatoConst), "format_string_%d", gen->admin_registros->contador_constantes++);
             snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoConst);
             insertarEnSeccionData(gen, buffer);
 
             if (valorNodo->tipo == AST_IDENTIFICADOR) {
-                // **DETECTAR SI ES .asciz O .skip**
                 bool esAsciz = esVariableAscizImpresion(gen, valorNodo->valor);
-                
                 if (esAsciz) {
-                    // Es string literal (.asciz) - cargar dirección directamente
                     snprintf(buffer, sizeof(buffer),
-                        "    ldr x1, =%s\n"       // x1 = dirección del string
-                        "    ldr x0, =%s\n"       // x0 = formato
+                        "    ldr x1, =%s\n"
+                        "    ldr x0, =%s\n"
                         "    bl printf\n",
                         valorNodo->valor, formatoConst);
                 } else {
-                    // Es puntero (.skip 8) - cargar el puntero que contiene
                     snprintf(buffer, sizeof(buffer),
-                        "    ldr x1, =%s\n"       // x1 = dirección de la variable
-                        "    ldr x1, [x1]\n"      // x1 = puntero a la cadena
-                        "    ldr x0, =%s\n"       // x0 = formato
+                        "    ldr x1, =%s\n"
+                        "    ldr x1, [x1]\n"
+                        "    ldr x0, =%s\n"
                         "    bl printf\n",
                         valorNodo->valor, formatoConst);
                 }
                 strcat(codigo, buffer);
             } else {
-                // Imprimir string literal
                 char* cadenaEscapada = limpiarCadenaParaASM(valorNodo->valor);
+                char cadenaPorcentaje[256];
+                escaparPorcentaje(cadenaPorcentaje, cadenaEscapada, sizeof(cadenaPorcentaje));
                 if (cadenaEscapada) {
                     char nombreConst[64];
                     snprintf(nombreConst, sizeof(nombreConst), "str_const_%d", gen->admin_registros->contador_constantes++);
@@ -429,29 +457,30 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     free(cadenaEscapada);
                 }
             }
-        } else if (tipo == TIPO_CHAR) {
-            // Definir el formato en la sección .data
+        }
+        // PRIORIDAD 3: Caracter
+        else if (tipo == TIPO_CHAR) {
             char formatoChar[64];
             snprintf(formatoChar, sizeof(formatoChar), "format_char_%d", gen->admin_registros->contador_constantes++);
             snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoChar);
             insertarEnSeccionData(gen, buffer);
 
-            // Imprimir carácter directamente
             snprintf(buffer, sizeof(buffer),
-                "    ldr x0, =%s\n"  // Formato para carácter
-                "    mov w1, #%d\n"  // Valor del carácter
-                "    bl printf\n",
-                formatoChar, valorNodo->valor[0]);
+                "    ldr x1, =%s\n"
+                "    ldrb w1, [x1]\n"
+                "    ldr x0, =%s\n"
+                "    bl printf\n",  
+                valorNodo->valor, formatoChar);
             strcat(codigo, buffer);
-        } else if (tipo == TIPO_INT) {
-            // Definir el formato en la sección .data
+        }
+        // PRIORIDAD 4: Entero
+        else if (tipo == TIPO_INT) {
             char formatoInt[64];
             snprintf(formatoInt, sizeof(formatoInt), "format_int_%d", gen->admin_registros->contador_constantes++);
             snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoInt);
             insertarEnSeccionData(gen, buffer);
 
             if (valorNodo->tipo == AST_IDENTIFICADOR) {
-                // Imprimir el valor de una variable
                 snprintf(buffer, sizeof(buffer),
                     "    ldr x1, =%s\n"
                     "    ldr w1, [x1]\n"
@@ -459,7 +488,6 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     "    bl printf\n",
                     valorNodo->valor, formatoInt);
             } else {
-                // Imprimir un literal
                 snprintf(buffer, sizeof(buffer),
                     "    ldr x0, =%s\n"
                     "    mov w1, #%d\n"
@@ -467,63 +495,96 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     formatoInt, atoi(valorNodo->valor));
             }
             strcat(codigo, buffer);
-        } else if (tipo == TIPO_FLOAT) {
+        }
+        // PRIORIDAD 5: Float/Double
+        else if (tipo == TIPO_FLOAT || tipo == TIPO_DOUBLE) {
             char formatoFloat[64];
             snprintf(formatoFloat, sizeof(formatoFloat), "format_float_%d", gen->admin_registros->contador_constantes++);
-            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%\\n\"\n", formatoFloat);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoFloat);
             insertarEnSeccionData(gen, buffer);
 
-            // Imprimir variable double/float
             if (valorNodo->tipo == AST_IDENTIFICADOR) {
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x1, =%s\n"      // x1 = dirección de la variable
-                    "    ldr d0, [x1]\n"     // d0 = valor de la variable
-                    "    ldr x0, =%s\n"      // x0 = formato
-                    "    bl printf\n",
-                    valorNodo->valor, formatoFloat);
-                strcat(codigo, buffer);
-            } else if (valorNodo->tipo == AST_NUMERO) {
-                // Si es un literal, crea una constante en .rodata
-                char nombreConst[64];
-                snprintf(nombreConst, sizeof(nombreConst), "float_const_%d", gen->admin_registros->contador_constantes++);
-                insertarConstanteDoubleRoData(gen, nombreConst, atof(valorNodo->valor));
+                // Cargar el valor en d0
                 snprintf(buffer, sizeof(buffer),
                     "    ldr x1, =%s\n"
-                    "    ldr d0, [x1]\n"
+                    "    ldr %s, [x1]\n",
+                    valorNodo->valor,
+                    (tipo == TIPO_DOUBLE ? "d0" : "s0"));
+                strcat(codigo, buffer);
+
+                // Si es float, convertir a double antes de imprimir
+                if (tipo == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer),
+                        "    fcvt d0, s0\n");
+                    strcat(codigo, buffer);
+                }
+
+                // Llamar a printf
+                snprintf(buffer, sizeof(buffer),
                     "    ldr x0, =%s\n"
                     "    bl printf\n",
-                    nombreConst, formatoFloat);
+                    formatoFloat);
+                strcat(codigo, buffer);
+            } else if (valorNodo->tipo == AST_NUMERO) {
+                // Crear constante en .data/.rodata
+                char nombreConst[64];
+                snprintf(nombreConst, sizeof(nombreConst), "%s_const_%d", (tipo == TIPO_FLOAT ? "float" : "double"), gen->admin_registros->contador_constantes++);
+                if (tipo == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer), "%s: .float %s\n", nombreConst, valorNodo->valor);
+                } else {
+                    snprintf(buffer, sizeof(buffer), "%s: .double %s\n", nombreConst, valorNodo->valor);
+                }
+                insertarEnSeccionData(gen, buffer);
+
+                // Cargar el valor en d0/s0
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldr %s, [x1]\n",
+                    nombreConst,
+                    (tipo == TIPO_DOUBLE ? "d0" : "s0"));
+                strcat(codigo, buffer);
+
+                // Si es float, convertir a double antes de imprimir
+                if (tipo == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer),
+                        "    fcvt d0, s0\n");
+                    strcat(codigo, buffer);
+                }
+
+                // Llamar a printf
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    formatoFloat);
                 strcat(codigo, buffer);
             }
-        } else if(tipo == TIPO_DOUBLE){
-            char formatoDouble[64];
-            snprintf(formatoDouble, sizeof(formatoDouble), "format_double_%d", gen->admin_registros->contador_constantes++);
-            snprintf(buffer, sizeof(buffer), "%s: .double \"%%\\n\"\n", formatoDouble);
+        } else if (tipo == TIPO_BOOLEAN) {
+            insertarConstantesBooleanas(gen);
+            char formatoBool[64];
+            snprintf(formatoBool, sizeof(formatoBool), "format_bool_%d", gen->admin_registros->contador_constantes++);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoBool);
             insertarEnSeccionData(gen, buffer);
 
-            // Imprimir variable double/float
             if (valorNodo->tipo == AST_IDENTIFICADOR) {
                 snprintf(buffer, sizeof(buffer),
-                    "    ldr x1, =%s\n"      // x1 = dirección de la variable
-                    "    ldr d0, [x1]\n"     // d0 = valor de la variable
-                    "    ldr x0, =%s\n"      // x0 = formato
-                    "    bl printf\n",
-                    valorNodo->valor, formatoDouble);
-                strcat(codigo, buffer);
-            } else if (valorNodo->tipo == AST_NUMERO) {
-                // Si es un literal, crea una constante en .rodata
-                char nombreConst[64];
-                snprintf(nombreConst, sizeof(nombreConst), "double_const_%d", gen->admin_registros->contador_constantes++);
-                insertarConstanteDoubleRoData(gen, nombreConst, atof(valorNodo->valor));
-                snprintf(buffer, sizeof(buffer),
                     "    ldr x1, =%s\n"
-                    "    ldr d0, [x1]\n"
+                    "    ldrb w1, [x1]\n"
+                    "    cmp w1, #0\n"
+                    "    ldr x2, =str_false\n"
+                    "    ldr x3, =str_true\n"
+                    "    csel x1, x3, x2, ne\n"
                     "    ldr x0, =%s\n"
                     "    bl printf\n",
-                    nombreConst, formatoDouble);
-                strcat(codigo, buffer);
+                    valorNodo->valor, formatoBool);
+            } else if (valorNodo->tipo == AST_BOOLEAN) {
+                const char* strBool = (strcmp(valorNodo->valor, "true") == 0) ? "str_true" : "str_false";
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    strBool, formatoBool);
             }
-
+            strcat(codigo, buffer);
         }else if (tipo == TIPO_VECTOR && valorNodo->tipo == AST_IDENTIFICADOR) {
             TipoDato tipoBase = obtenerTipoBaseVector(astGlobal, valorNodo->valor);
             int tam = getVectorSize(astGlobal, valorNodo->valor);
@@ -847,6 +908,44 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     "    ldr x0, =format_vec_close\n"
                     "    bl printf\n",
                     vecname);
+                strcat(codigo, buffer);
+            }
+        } else if (tipo == TIPO_BOOLEAN) {
+            insertarConstantesBooleanas(gen);
+            char formatoBool[64];
+            snprintf(formatoBool, sizeof(formatoBool), "format_bool_%d", gen->admin_registros->contador_constantes++);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoBool);
+            insertarEnSeccionData(gen, buffer);
+
+            if (valorNodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldrb w1, [x1]\n"
+                    "    cmp w1, #0\n"
+                    "    ldr x2, =str_false\n"
+                    "    ldr x3, =str_true\n"
+                    "    csel x1, x3, x2, ne\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    valorNodo->valor, formatoBool);
+            } else if (valorNodo->tipo == AST_BOOLEAN) {
+                const char* strBool = (strcmp(valorNodo->valor, "true") == 0) ? "str_true" : "str_false";
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    strBool, formatoBool);
+            } else {
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
+                strcat(codigo, resultado.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w0, %s\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    bl valueOf_bool\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    resultado.resultado, formatoBool);
                 strcat(codigo, buffer);
             }
         } else {

@@ -17,6 +17,7 @@ typedef struct {
     RegistroARM64 registros[32];  // x0 a x31
     int contador_temp;            // Para variables temporales
     int contador_constantes;   // Para constantes únicas
+    int contador_formatos;    // Para formatos de impresión únicos
 } AdministradorRegistros;
 
 // Funciones para manejo de registros

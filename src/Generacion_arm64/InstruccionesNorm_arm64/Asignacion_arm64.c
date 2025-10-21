@@ -2,9 +2,11 @@
 #include "Operadores_arm64.h"
 #include "declaracionConst_arm64.h"
 #include "../../semantico/tipos.h"
+#include "../Embebidas/EvaluadorExpr_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
+extern NodoAST* astGlobal;
 // Función para generar asignaciones en ARM64
 void generarAsignacionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     if (!gen || !nodo || nodo->tipo != AST_ASIGNACION) {
@@ -17,133 +19,82 @@ void generarAsignacionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
         return;
     }
 
-    NodoAST* idNodo = nodo->hijos[0];  // Nodo con el identificador de la variable
-    NodoAST* valorNodo = nodo->hijos[1];  // Nodo con el valor a asignar
+    NodoAST* idNodo = nodo->hijos[0];
+    NodoAST* valorNodo = nodo->hijos[1];
 
     if (!idNodo || idNodo->tipo != AST_IDENTIFICADOR) {
         printf("[DEBUG] Nodo identificador inválido en generarAsignacionARM64\n");
         return;
     }
 
-    const char* nombreVariable = idNodo->valor;  // Nombre de la variable
-    TipoDato tipoVariable = deducirTipoExpr(valorNodo);  // Deducir el tipo del valor a asignar
+    const char* nombreVariable = idNodo->valor;
+    TipoDato tipoVariable = deducirTipoExprARM64(valorNodo, astGlobal);
 
     char codigo[512] = "";
+    int regIndex = 1;
+    ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &regIndex);
+    strcat(codigo, resultado.codigo);
 
-    // **DETECTAR SI EL VALOR ES UNA OPERACIÓN**
-    if (valorNodo->tipo == AST_OPERACION) {
-        printf("[DEBUG] Detectada operación en asignación de '%s'\n", nombreVariable);
-        generarCodigoOperacionARM64(gen, nombreVariable, valorNodo, tipoVariable);
-    } 
-    // **DETECTAR SI ES ASIGNACIÓN DE VARIABLE A VARIABLE**
-    else if (valorNodo->tipo == AST_IDENTIFICADOR) {
-        printf("[DEBUG] Asignación de variable '%s' = '%s'\n", nombreVariable, valorNodo->valor);
-        
-        if (tipoVariable == TIPO_INT) {
-            snprintf(codigo, sizeof(codigo),
-                "    // Asignación: %s = %s\n"
-                "    ldr x0, =%s\n"      // Cargar dirección de variable origen
-                "    ldr w0, [x0]\n"     // Cargar valor de variable origen
-                "    ldr x1, =%s\n"      // Cargar dirección de variable destino
-                "    str w0, [x1]\n",    // Guardar valor en variable destino
-                nombreVariable, valorNodo->valor, valorNodo->valor, nombreVariable);
-        } else if (tipoVariable == TIPO_FLOAT) {
-            snprintf(codigo, sizeof(codigo),
-                "    // Asignación: %s = %s\n"
-                "    ldr x0, =%s\n"
-                "    ldr s0, [x0]\n"
+    if (tipoVariable == TIPO_INT) {
+        if (valorNodo->tipo == AST_IDENTIFICADOR) {
+            snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
                 "    ldr x1, =%s\n"
-                "    str s0, [x1]\n",
-                nombreVariable, valorNodo->valor, valorNodo->valor, nombreVariable);
-        } else if (tipoVariable == TIPO_DOUBLE) {
-            snprintf(codigo, sizeof(codigo),
-                "    // Asignación: %s = %s\n"
-                "    ldr x0, =%s\n"
-                "    ldr d0, [x0]\n"
-                "    ldr x1, =%s\n"
-                "    str d0, [x1]\n",
-                nombreVariable, valorNodo->valor, valorNodo->valor, nombreVariable);
-        } else if (tipoVariable == TIPO_CHAR || tipoVariable == TIPO_BOOLEAN) {
-            snprintf(codigo, sizeof(codigo),
-                "    // Asignación: %s = %s\n"
-                "    ldr x0, =%s\n"
-                "    ldrb w0, [x0]\n"
-                "    ldr x1, =%s\n"
-                "    strb w0, [x1]\n",
-                nombreVariable, valorNodo->valor, valorNodo->valor, nombreVariable);
-        }
-        
-        insertarEnSeccionText(gen, codigo);
-    } else {
-        // **VALOR LITERAL** (tu código existente)
-        char valorStr[64] = "0";
-
-        if (tipoVariable == TIPO_BOOLEAN) {
-            if (strcmp(valorNodo->valor, "true") == 0) {
-                strncpy(valorStr, "1", sizeof(valorStr));
-            } else if (strcmp(valorNodo->valor, "false") == 0) {
-                strncpy(valorStr, "0", sizeof(valorStr));
-            }
-        } else if (tipoVariable == TIPO_STRING) {
-            if (valorNodo->valor[0] == '"' && valorNodo->valor[strlen(valorNodo->valor) - 1] == '"') {
-                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-            } else {
-                snprintf(valorStr, sizeof(valorStr), "\"%s\"", valorNodo->valor);
-            }
-        } else if (tipoVariable == TIPO_CHAR) {
-            if (valorNodo->valor[0] == '\'' && valorNodo->valor[strlen(valorNodo->valor) - 1] == '\'') {
-                strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
-            } else if (strlen(valorNodo->valor) == 1) {
-                snprintf(valorStr, sizeof(valorStr), "'%s'", valorNodo->valor);
-            } else {
-                printf("[DEBUG] Valor de char inválido para variable '%s'\n", nombreVariable);
-                strncpy(valorStr, "'\\0'", sizeof(valorStr));
-            }
+                "    ldr w1, [x1]\n"
+                "    ldr x2, =%s\n"
+                "    str w1, [x2]\n",
+                valorNodo->valor, nombreVariable);
         } else {
-            strncpy(valorStr, valorNodo->valor, sizeof(valorStr) - 1);
+            snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                "    mov w1, %s\n"
+                "    ldr x2, =%s\n"
+                "    str w1, [x2]\n",
+                resultado.resultado, nombreVariable);
         }
-
-        valorStr[sizeof(valorStr) - 1] = '\0';
-
-        // Generar código para asignar el valor literal
-        if (tipoVariable == TIPO_INT) {
-            snprintf(codigo, sizeof(codigo),
-                "    mov w0, #%s\n"
+    } else if (tipoVariable == TIPO_FLOAT) {
+        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+            "    ldr x2, =%s\n"
+            "    str s0, [x2]\n",
+             nombreVariable);
+    } else if (tipoVariable == TIPO_DOUBLE) {
+        // Asignar double
+        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+            "    fmov d0, %s\n"
+            "    ldr x2, =%s\n"
+            "    str d0, [x2]\n",
+            resultado.resultado, nombreVariable);
+    } else if (tipoVariable == TIPO_CHAR) {
+        if (valorNodo->tipo == AST_IDENTIFICADOR) {
+        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
                 "    ldr x1, =%s\n"
-                "    str w0, [x1]\n",
-                valorStr, nombreVariable);
-        } else if (tipoVariable == TIPO_FLOAT) {
-            snprintf(codigo, sizeof(codigo),
-                "    fmov s0, #%s\n"
-                "    ldr x1, =%s\n"
-                "    str s0, [x1]\n",
-                valorStr, nombreVariable);
-        } else if (tipoVariable == TIPO_DOUBLE) {
-            snprintf(codigo, sizeof(codigo),
-                "    fmov d0, #%s\n"
-                "    ldr x1, =%s\n"
-                "    str d0, [x1]\n",
-                valorStr, nombreVariable);
-        } else if (tipoVariable == TIPO_CHAR) {
-            snprintf(codigo, sizeof(codigo),
-                "    mov w0, #%d\n"
-                "    ldr x1, =%s\n"
-                "    strb w0, [x1]\n",
-                valorNodo->valor[0], nombreVariable);
-        } else if (tipoVariable == TIPO_STRING) {
-            char nombreConst[64];
-            snprintf(nombreConst, sizeof(nombreConst), "str_const_%d", gen->admin_registros->contador_constantes++);
-            snprintf(codigo, sizeof(codigo),
-                "    ldr x0, =%s\n"
-                "    ldr x1, =%s\n"
-                "    str x0, [x1]\n",
-                nombreConst, nombreVariable);
-            insertarEnSeccionData(gen, nombreConst);
+                "    ldrb w0, [x1]\n"
+                "    ldr x2, =%s\n"
+                "    strb w0, [x2]\n",
+                valorNodo->valor, nombreVariable);
+        } else {
+            // Literal o resultado inmediato
+            snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                "    mov w0, %s\n"
+                "    ldr x2, =%s\n"
+                "    strb w0, [x2]\n",
+                resultado.resultado, nombreVariable);
         }
-
-        // Insertar el código generado en la sección .text
-        insertarEnSeccionText(gen, codigo);
+    } else if (tipoVariable == TIPO_BOOLEAN) {
+        // Asignar booleano
+        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+            "    mov w1, %s\n"
+            "    ldr x2, =%s\n"
+            "    strb w1, [x2]\n",
+            resultado.resultado, nombreVariable);
+    } else if (tipoVariable == TIPO_STRING) {
+        // Asignar string (puntero)
+        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+            "    ldr x2, =%s\n"      // x2 = dirección del string (resultado.resultado)
+            "    ldr x1, =%s\n"      // x1 = dirección de la variable puntero
+            "    str x2, [x1]\n",    // Guarda la dirección en la variable
+            resultado.resultado, nombreVariable);
     }
+
+    insertarEnSeccionText(gen, codigo);
 }
 
 void generarAsignacionCompuestaARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {

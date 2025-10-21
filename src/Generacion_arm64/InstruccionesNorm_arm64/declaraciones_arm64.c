@@ -15,6 +15,8 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
     gen->buffer = buffer;
     gen->buffer_size = buffer_size;
     gen->admin_registros = admin;
+    gen->temp_str_valueof_bss_insertado = false;
+    gen->contador_literales_string = 0;
 }
 void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
     if (!gen->buffer || !codigo) return;
@@ -277,13 +279,19 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
 
     if (inicializado) {
         if (tipo == TIPO_STRING) {
-            if (valorStr[0] != '"') {
-                char valorConComillas[128];
-                snprintf(valorConComillas, sizeof(valorConComillas), "\"%s\"", valorStr);
-                snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreVariable, valorConComillas);
-            } else {
-                snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreVariable, valorStr);
+            char nombreLiteral[64];
+            snprintf(nombreLiteral, sizeof(nombreLiteral), "str_lit_%s", nombreVariable);
+            char patron[128];
+            snprintf(patron, sizeof(patron), "%s:", nombreLiteral);
+            // Inserta el literal solo si no existe
+            if (!strstr(gen->buffer, patron)) {
+                snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreLiteral, valorStr);
+                insertarEnSeccionData(gen, codigo);
             }
+            // Inserta la variable puntero solo una vez
+            snprintf(codigo, sizeof(codigo), "%s: .quad %s\n", nombreVariable, nombreLiteral);
+            insertarEnSeccionData(gen, codigo);
+            return; // <-- IMPORTANTE: evita que siga insertando más abajo
         } else if(tipo == TIPO_FLOAT){
             // Quitar la 'f' si viene en el literal (opcional)
             char valorFloat[32];
@@ -294,11 +302,11 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
                 valorFloat[len-1] = '\0';
             }
             snprintf(codigo, sizeof(codigo), "%s: .float %s\n", nombreVariable, valorFloat);
-        } 
-        else {
+            insertarEnSeccionData(gen, codigo);
+        } else {
             snprintf(codigo, sizeof(codigo), "%s: .%s %s\n", nombreVariable, tipoDeclaracion, valorStr);
+            insertarEnSeccionData(gen, codigo);
         }
-        insertarEnSeccionData(gen, codigo);
     } else {
         // Variable no inicializada va a .bss
         size_t espacio = 4;

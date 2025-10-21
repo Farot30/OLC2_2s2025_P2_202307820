@@ -2,6 +2,7 @@
 #include "../InstruccionesNorm_arm64/Operadores_arm64.h"
 #include "../../semantico/semantico.h"
 #include "../generador_arm64.h"
+#include "../Embebidas/EvaluadorExpr_arm64.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -98,8 +99,9 @@ void generarCodigoIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     strcat(codigoCompleto, buffer);
     
     char codigoCondicion[512];
-    evaluarCondicionBooleanaMejorada(gen, condicion, codigoCondicion);
-    strcat(codigoCompleto, codigoCondicion);
+    int regIndex = 1;
+    ResultadoExprEmbebida resultadoCond = generarExprEmbebidaARM64(gen, condicion, &regIndex);
+    strcat(codigoCondicion, resultadoCond.codigo);
     
     // **PASO 2: SALTAR SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
