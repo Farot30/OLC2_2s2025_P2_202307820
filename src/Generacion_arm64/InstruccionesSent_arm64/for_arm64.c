@@ -2,6 +2,7 @@
 #include "../generador_arm64.h"
 #include "If_arm64.h"
 #include "Break_continue_arm64.h"
+#include "../Embebidas/EvaluadorExpr_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -31,13 +32,19 @@ void generarCodigoFor(GeneradorDeclaraciones* gen, NodoAST* nodoFor) {
 
     // CONDICIÓN
     if (condicion) {
-        char codigoCondicion[512];
-        evaluarCondicionBooleanaMejorada(gen, condicion, codigoCondicion);
-        insertarEnSeccionText(gen, codigoCondicion);
+        char codigoCondicion[512] = "";
+        int regIndex = 1;
+
+        ResultadoExprEmbebida resultadoCond = generarExprEmbebidaARM64(gen, condicion, &regIndex);
+        strcat(codigoCondicion, resultadoCond.codigo);
+
+        // **SALTAR SI w0 == 0 (condición falsa)**
         snprintf(buffer, sizeof(buffer),
-            "    cmp w0, #0\n"
-            "    beq %s\n", etiqueta_fin);
-        insertarEnSeccionText(gen, buffer);
+            "    // Saltar a else si condición es falsa\n"
+            "    cbz w0, %s\n\n", etiqueta_fin); // ✅ cbz en vez de beq
+        strcat(codigoCondicion, buffer);
+
+        insertarEnSeccionText(gen, codigoCondicion);
     }
 
     // CUERPO DEL BUCLE
@@ -54,7 +61,9 @@ void generarCodigoFor(GeneradorDeclaraciones* gen, NodoAST* nodoFor) {
     }
 
     // VOLVER AL INICIO DEL BUCLE
-    snprintf(buffer, sizeof(buffer), "    b %s\n", etiqueta_inicio);
+    snprintf(buffer, sizeof(buffer),
+        "    // Volver al inicio del bucle\n"
+        "    b %s\n", etiqueta_inicio);
     insertarEnSeccionText(gen, buffer);
 
     // ETIQUETA DE FIN DEL BUCLE

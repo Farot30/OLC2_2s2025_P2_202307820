@@ -173,7 +173,7 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     EtiquetasIF etiquetas = crearEtiquetasIF();
     NodoAST* condicion1 = nodoIF->hijos[0];
     NodoAST* bloqueIF = nodoIF->hijos[1];
-    NodoAST* nodoElseIF = nodoIF->hijos[2]; // Nodo ELSEIF completo
+    NodoAST* nodoElseIF = nodoIF->hijos[2];
     
     printf("[DEBUG] Generando código IF-ELSE IF con etiquetas únicas\n");
     
@@ -190,8 +190,8 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     
     // **PASO 2: SALTAR A ELSEIF SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
-        "    // Saltar a elseif si condición es falsa\n"
-        "    cbz w0, %s\n\n", etiquetas.etiqueta_elseif); // ✅ cbz en vez de beq
+        "    // Saltar a siguiente bloque si condición es falsa\n"
+        "    cbz w0, %s\n\n", etiquetas.etiqueta_elseif);
     strcat(codigoCompleto, buffer);
     
     insertarEnSeccionText(gen, codigoCompleto);
@@ -207,9 +207,18 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     snprintf(buffer, sizeof(buffer), "%s:\n", etiquetas.etiqueta_elseif);
     insertarEnSeccionText(gen, buffer);
     
-    // **PASO 6: PROCESAR ELSEIF RECURSIVAMENTE**
+    // **PASO 6: PROCESAR SIGUIENTE NODO (IF, ELSE IF o ELSE)**
     if (nodoElseIF) {
-        GeneradorCodigoARM64(nodoElseIF);
+        if (nodoElseIF->tipo == AST_ELSEIF) {
+            // Es otro else if, procesar recursivamente
+            GeneradorCodigoARM64(nodoElseIF->hijos[0]); // El IF interno
+        } else if (nodoElseIF->tipo == AST_ELSE) {
+            // Es un else final
+            generarBloqueMejorado(gen, nodoElseIF->hijos[0]);
+        } else {
+            // Es un IF simple (caso de else if sin AST_ELSEIF explícito)
+            GeneradorCodigoARM64(nodoElseIF);
+        }
     }
     
     // **PASO 7: ETIQUETA DE FINAL**

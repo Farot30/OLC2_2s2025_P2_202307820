@@ -41,9 +41,26 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
             pos = gen->buffer + offset;
         }
 
-        // Mover el contenido para hacer espacio
-        memmove(pos + len_codigo, pos, len_actual - offset + 1);
-        memcpy(pos, codigo, len_codigo);
+        // **VERIFICAR SI LA POSICIÓN ANTERIOR ES UNA ETIQUETA SIN SALTO DE LÍNEA**
+        if (offset > 0 && *(pos - 1) != '\n') {
+            // Insertar salto de línea antes del código
+            char codigoConSalto[len_codigo + 2];
+            snprintf(codigoConSalto, sizeof(codigoConSalto), "\n%s", codigo);
+            size_t lenNueva = strlen(codigoConSalto);
+            
+            if (len_actual + lenNueva + 1 >= gen->buffer_size) {
+                gen->buffer_size = len_actual + lenNueva + 1024;
+                gen->buffer = realloc(gen->buffer, gen->buffer_size);
+                pos = gen->buffer + offset;
+            }
+            
+            memmove(pos + lenNueva, pos, len_actual - offset + 1);
+            memcpy(pos, codigoConSalto, lenNueva);
+        } else {
+            // Mover el contenido para hacer espacio
+            memmove(pos + len_codigo, pos, len_actual - offset + 1);
+            memcpy(pos, codigo, len_codigo);
+        }
     } else {
         // Si no encuentra el marcador de salida, buscar el punto de entrada
         const char* start_marker = "    // Punto de entrada del programa\n";
@@ -70,6 +87,7 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
         }
     }
 }
+
 void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo) {
     if (!gen->buffer || !codigo) return;
 
