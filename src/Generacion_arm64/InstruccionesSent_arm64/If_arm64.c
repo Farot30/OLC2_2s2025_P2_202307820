@@ -105,7 +105,7 @@ void generarCodigoIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     // **PASO 2: SALTAR SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar si condición es falsa\n"
-        "    beq %s\n\n", etiquetas.etiqueta_endif);
+        "    cbz w0, %s\n\n", etiquetas.etiqueta_endif); // ✅ cbz en vez de beq
     strcat(codigoCompleto, buffer);
     
     // **INSERTAR TODO LO ANTERIOR**
@@ -143,7 +143,7 @@ void generarCodigoIFElse(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     // **PASO 2: SALTAR A ELSE SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar a else si condición es falsa\n"
-        "    beq %s\n\n", etiquetas.etiqueta_else);
+        "    cbz w0, %s\n\n", etiquetas.etiqueta_else); // ✅ cbz en vez de beq
     strcat(codigoCompleto, buffer);
     
     insertarEnSeccionText(gen, codigoCompleto);
@@ -191,7 +191,7 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     // **PASO 2: SALTAR A ELSEIF SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar a elseif si condición es falsa\n"
-        "    beq %s\n\n", etiquetas.etiqueta_elseif);
+        "    cbz w0, %s\n\n", etiquetas.etiqueta_elseif); // ✅ cbz en vez de beq
     strcat(codigoCompleto, buffer);
     
     insertarEnSeccionText(gen, codigoCompleto);

@@ -303,7 +303,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, gt
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_13
     bl printf
     // Printf optimizado para concatenación
@@ -313,7 +314,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, lt
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_14
     bl printf
     // Printf optimizado para concatenación
@@ -323,7 +325,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, ge
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_15
     bl printf
     // Printf optimizado para concatenación
@@ -333,7 +336,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, le
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_16
     bl printf
     // Printf optimizado para concatenación
@@ -343,7 +347,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, eq
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_17
     bl printf
     // Printf optimizado para concatenación
@@ -353,7 +358,8 @@ _start:
     ldr w2, [x2]
     cmp w1, w2
     cset w1, ne
-    mov w4, w1
+    mov w0, w1
+    mov w4, w0
     ldr x0, =format_concat_18
     bl printf
     ldr x0, =format_string_9
@@ -526,10 +532,15 @@ if_0:
     // Evaluación de condición IF
     ldr x1, =textoNulo
     ldr x1, [x1]
-    cmp x1, str_lit_1
+    ldr x0, =textoNulo
+    ldr x0, [x0]
+    ldr x0, =textoNulo
+    ldr x0, [x0]
+    bl strcmp
+    cmp w0, #0
     cset w0, eq
     // Saltar si condición es falsa
-    beq if_end_0
+    cbz w0, if_end_0
 
     ldr x0, =format_string_31
     ldr x1, =str_const_32
@@ -546,10 +557,15 @@ if_end_0:
     // Evaluación de condición IF
     ldr x1, =otroTextoNulo
     ldr x1, [x1]
-    cmp x1, str_lit_3
+    ldr x0, =otroTextoNulo
+    ldr x0, [x0]
+    ldr x0, =otroTextoNulo
+    ldr x0, [x0]
+    bl strcmp
+    cmp w0, #0
     cset w0, eq
     // Saltar a else si condición es falsa
-    beq if_else_1
+    cbz w0, if_else_1
 
     ldr x2, =str_lit_4
     ldr x1, =resultado
