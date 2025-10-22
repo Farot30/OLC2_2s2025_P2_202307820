@@ -254,23 +254,46 @@ static bool procesarParteParaFormato(GeneradorDeclaraciones* gen, ParteConcatena
         
         if (tipo == TIPO_INT) {
             strcat(formato, "%d");
-            snprintf(buffer, sizeof(buffer), "    mov w1, %s\n", resultado.resultado);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex,resultado.resultado);
             strcat(codigoArgs, buffer);
             printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
             return true;
         } else if (tipo == TIPO_DOUBLE) {
             strcat(formato, "%f");
-            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", *regIndex - 1, resultado.resultado);
+            snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", *regIndex - 1);
+            strcat(codigoArgs, buffer);
+            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+            return true;
         } else if( tipo == TIPO_FLOAT) {
             strcat(formato, "%f");
-            snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", *regIndex - 2, *regIndex - 2);
+                // Cargar el valor float en sN y convertir a double si printf lo requiere
+                snprintf(buffer, sizeof(buffer),
+                    "    fcvt d%d, s%d\n", // Convierte float a double para printf
+                    *regIndex - 2 ,*regIndex - 2);
+                strcat(codigoArgs, buffer);
+                printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
+                return true;
+
         } if (tipo == TIPO_CHAR) {
             strcat(formato, "%c");
-            // Cargar el valor del char en w1
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x1, =%s\n"
-                "    ldrb w1, [x1]\n",
-                nodo->valor);
+            // Si el nodo es AST_VALUEOF, usar el resultado del hijo
+            if (nodo->tipo == AST_VALUEOF && nodo->num_hijos == 1) {
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
+                strcat(codigoArgs, resultado.codigo);
+                // Mueve el valor al registro de argumento
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resultado.resultado);
+                strcat(codigoArgs, buffer);
+                (*regIndex)++;
+                return true;
+            } else if (nodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldrb w%d, [x%d]\n",
+                    *regIndex, nodo->valor, *regIndex, *regIndex);
+                strcat(codigoArgs, buffer);
+                (*regIndex)++;
+                return true;
+            }
         } 
         else if( tipo == TIPO_BOOLEAN) {
             insertarConstantesBooleanas(gen);
@@ -496,6 +519,36 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
             }
             strcat(codigo, buffer);
         }
+        else if (valorNodo->tipo == AST_VALUEOF && valorNodo->num_hijos == 1) {
+            TipoDato tipoValueOf = deducirTipoExprARM64(valorNodo->hijos[0], astGlobal);
+
+            if (tipoValueOf == TIPO_FLOAT || tipoValueOf == TIPO_DOUBLE) {
+                char formatoFloat[64];
+                snprintf(formatoFloat, sizeof(formatoFloat), "format_float_%d", gen->admin_registros->contador_constantes++);
+                snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoFloat);
+                insertarEnSeccionData(gen, buffer);
+
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo->hijos[0], &(int){1});
+                strcat(codigo, resultado.codigo);
+
+                // Cargar el valor en s0/d0 y convertir si es float
+                if (tipoValueOf == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer),
+                        "    fcvt d0, s0\n");
+                    strcat(codigo, buffer);
+                }
+
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",
+                    formatoFloat);
+                strcat(codigo, buffer);
+                insertarEnSeccionText(gen, codigo);
+                return;
+            }
+            // Puedes agregar otros tipos aquí si lo necesitas
+        }
+
         // PRIORIDAD 5: Float/Double
         else if (tipo == TIPO_FLOAT || tipo == TIPO_DOUBLE) {
             char formatoFloat[64];

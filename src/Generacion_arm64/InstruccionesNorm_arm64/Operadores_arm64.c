@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+extern NodoAST* astGlobal;
 
 TipoDato detectarTipoLiteral(const char* valor) {
     // Si contiene punto decimal, es float o double
@@ -441,7 +442,24 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
             snprintf(buffer, sizeof(buffer), "    mov %s, #%d\n", registro, valor);
         }
     } else if (nodo->tipo == AST_IDENTIFICADOR) {
-        if (tipoDestino == TIPO_BOOLEAN) {
+        TipoDato tipoVar = deducirTipoExprARM64(nodo, astGlobal);
+        if (tipoDestino == TIPO_DOUBLE) {
+            if (tipoVar == TIPO_INT) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x2, =%s\n"
+                    "    ldr w2, [x2]\n"
+                    "    scvtf %s, w2\n", nodo->valor, registro);
+            } else if (tipoVar == TIPO_DOUBLE) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x2, =%s\n"
+                    "    ldr %s, [x2]\n", nodo->valor, registro);
+            } else if (tipoVar == TIPO_FLOAT) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x2, =%s\n"
+                    "    ldr s2, [x2]\n"
+                    "    fcvt %s, s2\n", nodo->valor, registro);
+            }
+        } else if (tipoDestino == TIPO_BOOLEAN) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x2, =%s\n"
                 "    ldrb %s, [x2]\n", nodo->valor, registro);  // ldrb para boolean
@@ -576,9 +594,23 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (izq->tipo == AST_IDENTIFICADOR) {
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x%d, =%s\n"
-                "    ldr d%d, [x%d]\n", regIzq, izq->valor, regIzq, regIzq);
+            TipoDato tipoVar = deducirTipoExprARM64(izq, astGlobal);
+            if (tipoVar == TIPO_INT) {
+                // Cargar int y convertir a double
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr w%d, [x%d]\n"
+                    "    scvtf d%d, w%d\n", regIzq, izq->valor, regIzq, regIzq, regIzq, regIzq);
+            } else if (tipoVar == TIPO_DOUBLE) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr d%d, [x%d]\n", regIzq, izq->valor, regIzq, regIzq);
+            } else if (tipoVar == TIPO_FLOAT) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr s%d, [x%d]\n"
+                    "    fcvt d%d, s%d\n", regIzq, izq->valor, regIzq, regIzq, regIzq, regIzq);
+            }
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         }
@@ -617,9 +649,23 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (der->tipo == AST_IDENTIFICADOR) {
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x%d, =%s\n"
-                "    ldr d%d, [x%d]\n", regDer, der->valor, regDer, regDer);
+            TipoDato tipoVar = deducirTipoExprARM64(der, astGlobal);
+            if (tipoVar == TIPO_INT) {
+                // Cargar int y convertir a double
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr w%d, [x%d]\n"
+                    "    scvtf d%d, w%d\n", regDer, der->valor, regDer, regDer, regDer, regDer);
+            } else if (tipoVar == TIPO_DOUBLE) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr d%d, [x%d]\n", regDer, der->valor, regDer, regDer);
+            } else if (tipoVar == TIPO_FLOAT) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr s%d, [x%d]\n"
+                    "    fcvt d%d, s%d\n", regDer, der->valor, regDer, regDer, regDer, regDer);
+            }
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         }

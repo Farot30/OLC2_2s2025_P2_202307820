@@ -31,6 +31,25 @@ void generarAsignacionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     TipoDato tipoVariable = deducirTipoExprARM64(valorNodo, astGlobal);
 
     char codigo[512] = "";
+
+    if (tipoVariable == TIPO_STRING && valorNodo->tipo == AST_CADENA) {
+        // Generar literal en .data
+        char nombreLiteral[64];
+        snprintf(nombreLiteral, sizeof(nombreLiteral), "str_lit_%d", gen->contador_literales_string++);
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%s\"\n", nombreLiteral, valorNodo->valor);
+        insertarEnSeccionData(gen, buffer);
+        
+        // Asignar el puntero al literal
+        snprintf(codigo, sizeof(codigo),
+            "    ldr x2, =%s\n"
+            "    ldr x1, =%s\n"
+            "    str x2, [x1]\n",
+            nombreLiteral, nombreVariable);
+        insertarEnSeccionText(gen, codigo);
+        return;
+    }
+
     int regIndex = 1;
     ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &regIndex);
     strcat(codigo, resultado.codigo);
@@ -86,12 +105,38 @@ void generarAsignacionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
             "    strb w1, [x2]\n",
             resultado.resultado, nombreVariable);
     } else if (tipoVariable == TIPO_STRING) {
-        // Asignar string (puntero)
-        snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
-            "    ldr x2, =%s\n"      // x2 = dirección del string (resultado.resultado)
-            "    ldr x1, =%s\n"      // x1 = dirección de la variable puntero
-            "    str x2, [x1]\n",    // Guarda la dirección en la variable
-            resultado.resultado, nombreVariable);
+        if (valorNodo->tipo == AST_IDENTIFICADOR) {
+            snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                "    ldr x2, =%s\n"
+                "    ldr x2, [x2]\n"
+                "    ldr x1, =%s\n"
+                "    str x2, [x1]\n",
+                valorNodo->valor, nombreVariable);
+        } else if (valorNodo->tipo == AST_CADENA) {
+                // **Para literales string: la etiqueta del literal es el puntero**
+                // resultado.resultado contiene el nombre del literal (ej: str_lit_2)
+                snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                    "    ldr x2, =%s\n"
+                    "    ldr x1, =%s\n"
+                    "    str x2, [x1]\n",
+                    resultado.resultado, nombreVariable);
+            } else {
+            // Si resultado.resultado es un registro, solo muévelo
+            if (resultado.resultado[0] == 'x' || resultado.resultado[0] == 'w') {
+                snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                    "    mov x2, %s\n"
+                    "    ldr x1, =%s\n"
+                    "    str x2, [x1]\n",
+                    resultado.resultado, nombreVariable);
+            } else {
+                snprintf(codigo + strlen(codigo), sizeof(codigo) - strlen(codigo),
+                    "    ldr x2, =%s\n"
+                    "    ldr x2, [x2]\n"
+                    "    ldr x1, =%s\n"
+                    "    str x2, [x1]\n",
+                    resultado.resultado, nombreVariable);
+            }
+        }
     }
 
     insertarEnSeccionText(gen, codigo);

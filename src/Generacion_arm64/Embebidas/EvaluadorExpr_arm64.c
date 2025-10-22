@@ -147,19 +147,20 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
             else if (strcmp(expr->valor, "==") == 0) {
                 if (izq.tipo == TIPO_STRING && der.tipo == TIPO_STRING) {
                     char buffer[256];
+
+                    const char* izq_nombre = expr->hijos[0]->tipo == AST_IDENTIFICADOR ? expr->hijos[0]->valor : izq.resultado;
+                    const char* der_nombre = expr->hijos[1]->tipo == AST_IDENTIFICADOR ? expr->hijos[1]->valor : der.resultado;
+
                     snprintf(buffer, sizeof(buffer),
-                        "    mov x0, %s\n"
-                        "    mov x1, %s\n"
+                        "    ldr x0, =%s\n"
+                        "    ldr x0, [x0]\n"
+                        "    ldr x1, =%s\n"
+                        "    ldr x1, [x1]\n"
                         "    bl strcmp\n"
                         "    cmp w0, #0\n"
-                        "    cset w%d, %s\n",
-                        izq.resultado, der.resultado, *regIndex,
-                        (strcmp(expr->valor, "==") == 0) ? "eq" : "ne");
-                    strcat(res.codigo, buffer);
-                    snprintf(res.resultado, sizeof(res.resultado), "w%d", *regIndex);
-                    res.tipo = TIPO_BOOLEAN;
-                    (*regIndex)++;
-                    return res;
+                        "    cset w%d, eq\n"
+                        "    mov w0, w%d\n",
+                        izq_nombre, der_nombre, *regIndex, *regIndex);
                 }
                     snprintf(buffer, sizeof(buffer),
                         "    cmp %s, %s\n"

@@ -98,15 +98,13 @@ void generarCodigoIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     snprintf(buffer, sizeof(buffer), "    // Evaluación de condición IF\n");
     strcat(codigoCompleto, buffer);
     
-    char codigoCondicion[512];
     int regIndex = 1;
     ResultadoExprEmbebida resultadoCond = generarExprEmbebidaARM64(gen, condicion, &regIndex);
-    strcat(codigoCondicion, resultadoCond.codigo);
+    strcat(codigoCompleto, resultadoCond.codigo);
     
     // **PASO 2: SALTAR SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar si condición es falsa\n"
-        "    cmp w0, #0\n"
         "    beq %s\n\n", etiquetas.etiqueta_endif);
     strcat(codigoCompleto, buffer);
     
@@ -138,14 +136,13 @@ void generarCodigoIFElse(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     snprintf(buffer, sizeof(buffer), "    // Evaluación de condición IF\n");
     strcat(codigoCompleto, buffer);
     
-    char codigoCondicion[512];
-    evaluarCondicionBooleanaMejorada(gen, condicion, codigoCondicion);
-    strcat(codigoCompleto, codigoCondicion);
+    int regIndex = 1;
+    ResultadoExprEmbebida resultadoCond = generarExprEmbebidaARM64(gen, condicion, &regIndex);
+    strcat(codigoCompleto, resultadoCond.codigo);
     
     // **PASO 2: SALTAR A ELSE SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar a else si condición es falsa\n"
-        "    cmp w0, #0\n"
         "    beq %s\n\n", etiquetas.etiqueta_else);
     strcat(codigoCompleto, buffer);
     
@@ -187,14 +184,13 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF) {
     snprintf(buffer, sizeof(buffer), "    // Evaluación de condición IF\n");
     strcat(codigoCompleto, buffer);
     
-    char codigoCondicion[512];
-    evaluarCondicionBooleanaMejorada(gen, condicion1, codigoCondicion);
-    strcat(codigoCompleto, codigoCondicion);
+    int regIndex = 1;
+    ResultadoExprEmbebida resultadoCond = generarExprEmbebidaARM64(gen, condicion1, &regIndex);
+    strcat(codigoCompleto, resultadoCond.codigo);
     
     // **PASO 2: SALTAR A ELSEIF SI CONDICIÓN ES FALSA**
     snprintf(buffer, sizeof(buffer),
         "    // Saltar a elseif si condición es falsa\n"
-        "    cmp w0, #0\n"
         "    beq %s\n\n", etiquetas.etiqueta_elseif);
     strcat(codigoCompleto, buffer);
     
