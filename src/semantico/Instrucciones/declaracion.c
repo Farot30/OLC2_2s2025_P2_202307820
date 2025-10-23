@@ -354,12 +354,12 @@ int verificarDeclaracion(NodoAST* nodo) {
                 return 0;
             }
         }else {
-            printf("[DEBUG DECLARACION] === EVALUANDO EXPRESIÓN PARA '%s' ===\n", identificador->valor);
+           // printf("[DEBUG DECLARACION] === EVALUANDO EXPRESIÓN PARA '%s' ===\n", identificador->valor);
             // Caso normal (expresión)
              ValorSimbolo v = evaluarExpr(valor);
 
-             printf("[DEBUG DECLARACION] Expresión evaluada: inicializado=%d, tipo=%d\n", 
-                   v.inicializado, v.tipo);
+            // printf("[DEBUG DECLARACION] Expresión evaluada: inicializado=%d, tipo=%d\n", 
+             //      v.inicializado, v.tipo);
             if(v.inicializado){
 
                 if (valor->tipo == AST_LLAMADA) {
@@ -370,8 +370,8 @@ int verificarDeclaracion(NodoAST* nodo) {
                     if (!esWidening(v.tipo, sim->tipo)) {
                         // Permitir narrowing casting de int a char
                         if (sim->tipo == TIPO_CHAR && v.tipo == TIPO_INT) {
-                            printf("[DEBUG DECLARACION] Narrowing casting de int a char para '%s': %d -> '%c'\n",
-                                identificador->valor, v.v.i, (char)v.v.i);
+                            // printf("[DEBUG DECLARACION] Narrowing casting de int a char para '%s': %d -> '%c'\n",
+                            //        identificador->valor, v.v.i, (char)v.v.i);
                             // Convertir el valor de int a char
                             v.tipo = TIPO_CHAR;
                             v.v.c = (char)v.v.i;

@@ -430,25 +430,25 @@ static const char* nombreClase(TipoSimbolo c){
 
 void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
     if (!sim) {
-        printf("[DEBUG setValorSimbolo] Símbolo es NULL\n");
+        //printf("[DEBUG setValorSimbolo] Símbolo es NULL\n");
         return;
     }
 
 
-    printf("[DEBUG setValorSimbolo] === INICIANDO ASIGNACIÓN ===\n");
-    printf("[DEBUG setValorSimbolo] Variable: %s, Ámbito: %s, Nuevo valor: ", sim->nombre, sim->ambito);
-    printf("[DEBUG setValorSimbolo] Variable: %s\n", sim->nombre);
-    printf("[DEBUG setValorSimbolo] Tipo símbolo: %d, Tipo valor: %d\n", sim->tipo, tipoValor);
-    printf("[DEBUG setValorSimbolo] Valor inicializado: %d\n", val.inicializado);
+    //printf("[DEBUG setValorSimbolo] === INICIANDO ASIGNACIÓN ===\n");
+    //printf("[DEBUG setValorSimbolo] Variable: %s, Ámbito: %s, Nuevo valor: ", sim->nombre, sim->ambito);
+    //printf("[DEBUG setValorSimbolo] Variable: %s\n", sim->nombre);
+    //printf("[DEBUG setValorSimbolo] Tipo símbolo: %d, Tipo valor: %d\n", sim->tipo, tipoValor);
+    //printf("[DEBUG setValorSimbolo] Valor inicializado: %d\n", val.inicializado);
 
     if (sim->clase == SIMBOLO_VECTOR) {
-        printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN VECTOR '%s'! Tipo: %d->%d\n", 
-               sim->nombre, sim->tipo, tipoValor);
+       // printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN VECTOR '%s'! Tipo: %d->%d\n", 
+        //       sim->nombre, sim->tipo, tipoValor);
     }
 
     if (sim->clase == SIMBOLO_MATRIZ) {
-        printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN MATRIZ '%s'! Tipo: %d->%d\n", 
-               sim->nombre, sim->tipo, tipoValor);
+      //  printf("[DEBUG setValorSimbolo] ¡OPERACIÓN EN MATRIZ '%s'! Tipo: %d->%d\n", 
+        //       sim->nombre, sim->tipo, tipoValor);
     }
 
     // Actualizar el ámbito de la asignación
@@ -457,7 +457,7 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
 
     // PRIMERO: Verificar widening casting (char -> int -> float -> double)
     if (esWidening(tipoValor, sim->tipo)) {
-        printf("[DEBUG setValorSimbolo] Aplicando widening casting de %d a %d\n", tipoValor, sim->tipo);
+     //   printf("[DEBUG setValorSimbolo] Aplicando widening casting de %d a %d\n", tipoValor, sim->tipo);
         double base = 0;
         switch (tipoValor) {
             case TIPO_CHAR:   base = (unsigned char)val.v.c; break;
@@ -466,68 +466,68 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
             case TIPO_DOUBLE: base = val.v.d; break;
             default: break;
         }
-        printf("[DEBUG setValorSimbolo] Valor base calculado: %lf\n", base);
+      //  printf("[DEBUG setValorSimbolo] Valor base calculado: %lf\n", base);
         
         // Asignar según el tipo del símbolo
         switch (sim->tipo) {
             case TIPO_DOUBLE: 
                 sim->valor.v.d = base; 
-                printf("[DEBUG setValorSimbolo] Double asignado: %lf\n", sim->valor.v.d);
+             //   printf("[DEBUG setValorSimbolo] Double asignado: %lf\n", sim->valor.v.d);
                 break;
             case TIPO_FLOAT:  
                 sim->valor.v.f = (float)base; 
-                printf("[DEBUG setValorSimbolo] Float asignado: %f\n", sim->valor.v.f);
+            //    printf("[DEBUG setValorSimbolo] Float asignado: %f\n", sim->valor.v.f);
                 break;
             case TIPO_INT:    
                 sim->valor.v.i = (int)base; 
-                printf("[DEBUG setValorSimbolo] Int asignado: %d\n", sim->valor.v.i);
+             //   printf("[DEBUG setValorSimbolo] Int asignado: %d\n", sim->valor.v.i);
                 break;
             case TIPO_CHAR:   
                 sim->valor.v.c = (char)base; 
-                printf("[DEBUG setValorSimbolo] Char asignado: %c\n", sim->valor.v.c);
+             //   printf("[DEBUG setValorSimbolo] Char asignado: %c\n", sim->valor.v.c);
                 break;
             default: break;
         }
         
         sim->valor.tipo = sim->tipo;
         sim->valor.inicializado = 1;
-        printf("[DEBUG setValorSimbolo] Widening completado exitosamente\n");
+       // printf("[DEBUG setValorSimbolo] Widening completado exitosamente\n");
         return;
     }
 
     // SEGUNDO: Asignación directa para tipos iguales
     if (sim->tipo == tipoValor) {
-        printf("[DEBUG setValorSimbolo] Asignación directa (tipos iguales)\n");
+       // printf("[DEBUG setValorSimbolo] Asignación directa (tipos iguales)\n");
         
         // Asignar según el tipo específico
         switch (sim->tipo) {
             case TIPO_INT:
                 sim->valor.v.i = val.v.i;
-                printf("[DEBUG setValorSimbolo] Int directo: %d\n", sim->valor.v.i);
+               // printf("[DEBUG setValorSimbolo] Int directo: %d\n", sim->valor.v.i);
                 break;
             case TIPO_FLOAT:
                 sim->valor.v.f = val.v.f;
-                printf("[DEBUG setValorSimbolo] Float directo: %f\n", sim->valor.v.f);
+               // printf("[DEBUG setValorSimbolo] Float directo: %f\n", sim->valor.v.f);
                 break;
             case TIPO_DOUBLE:
                 sim->valor.v.d = val.v.d;
-                printf("[DEBUG setValorSimbolo] Double directo: %lf\n", sim->valor.v.d);
+               // printf("[DEBUG setValorSimbolo] Double directo: %lf\n", sim->valor.v.d);
                 break;
             case TIPO_CHAR:
                 sim->valor.v.c = val.v.c;
-                printf("[DEBUG setValorSimbolo] Char directo: %c\n", sim->valor.v.c);
+              //  printf("[DEBUG setValorSimbolo] Char directo: %c\n", sim->valor.v.c);
                 break;
             case TIPO_BOOLEAN:
                 sim->valor.v.b = val.v.b;
-                printf("[DEBUG setValorSimbolo] Boolean directo: %s\n", val.v.b ? "true" : "false");
+               // printf("[DEBUG setValorSimbolo] Boolean directo: %s\n", val.v.b ? "true" : "false");
                 break;
             case TIPO_STRING:
                 if (sim->valor.v.s) free(sim->valor.v.s);
                 sim->valor.v.s = val.v.s ? strdup(val.v.s) : NULL;
-                printf("[DEBUG setValorSimbolo] String directo: %s\n", sim->valor.v.s ? sim->valor.v.s : "NULL");
+               // printf("[DEBUG setValorSimbolo] String directo: %s\n", sim->valor.v.s ? sim->valor.v.s : "NULL");
                 break;
             default:
-                printf("[ERROR setValorSimbolo] Tipo desconocido en asignación directa: %d\n", sim->tipo);
+              //  printf("[ERROR setValorSimbolo] Tipo desconocido en asignación directa: %d\n", sim->tipo);
                 return;
         }
         
@@ -538,7 +538,7 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
 
     // TERCERO: Narrowing casting manual (double -> float -> int -> char)
     if (esNarrowing(tipoValor, sim->tipo)) {
-        printf("[DEBUG setValorSimbolo] Intentando narrowing casting\n");
+       // printf("[DEBUG setValorSimbolo] Intentando narrowing casting\n");
         // Solo permitir si el valor proviene de un cast explícito
         if (!val.es_cast) {
             printf("[ERROR] Narrowing casting solo permitido con cast explícito: %s <- %s\n",
@@ -562,7 +562,7 @@ void setValorSimbolo(Simbolo* sim, TipoDato tipoValor, ValorSimbolo val) {
         }
         sim->valor.tipo = sim->tipo;
         sim->valor.inicializado = 1;
-        printf("[DEBUG setValorSimbolo] Narrowing realizado\n");
+       // printf("[DEBUG setValorSimbolo] Narrowing realizado\n");
         return;
     }
 

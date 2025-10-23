@@ -168,41 +168,41 @@ public static void main() {
     // For basico
     System.out.println("Listado numerado:");
     for (int i = 1; i <= 5; i++) {
-        String nombre = "";
+        String nombres = "";
         int notaS = 0;
         
         if (i == 1) {
-            nombre = estudiante1;
+            nombres = estudiante1;
             notaS = nota1;
         } else if (i == 2) {
-            nombre = estudiante2;
+            nombres = estudiante2;
             notaS = nota2;
         } else if (i == 3) {
-            nombre = estudiante3;
+            nombres = estudiante3;
             notaS = nota3;
         } else if (i == 4) {
-            nombre = estudiante4;
+            nombres = estudiante4;
             notaS = nota4;
         } else if (i == 5) {
-            nombre = estudiante5;
+            nombres = estudiante5;
             notaS = nota5;
         }
         
-        System.out.println(String.valueOf(i) + ". " + nombre + " - Nota: " + String.valueOf(notaS));
+        System.out.println(String.valueOf(i) + ". " + nombres + " - Nota: " + String.valueOf(notaS));
     }
     
     // For con decremento
     System.out.println("\nProceso inverso:");
-    for (int i = 5; i >= 1; i--) {
-        System.out.println("Procesando posicion: " + String.valueOf(i));
+    for (int is = 5; is >= 1; is--) {
+        System.out.println("Procesando posicion: " + String.valueOf(is));
     }
     
     // For anidado
     System.out.println("\nTabla de multiplicar (1-3 x 1-4):");
-    for (int i = 1; i <= 3; i++) {
+    for (int id = 1; id <= 3; id++) {
         for (int j = 1; j <= 4; j++) {
-            int resultado = i * j;
-            System.out.println(String.valueOf(i) + " x " + String.valueOf(j) + " = " + String.valueOf(resultado));
+            int resultado = id * j;
+            System.out.println(String.valueOf(id) + " x " + String.valueOf(j) + " = " + String.valueOf(resultado));
         }
     }
     
@@ -326,31 +326,31 @@ public static void main() {
     
     // Break en for
     System.out.println("Busqueda con break (primera nota > 90):");
-    for (int i = 1; i <= 5; i++) {
-        int notaActual = 0;
-        String nombreActual = "";
+    for (int ih = 1; ih <= 5; ih++) {
+        int notaActuald = 0;
+        String nombreActuales = "";
         
-        if (i == 1) {
-            notaActual = nota1;
-            nombreActual = estudiante1;
-        } else if (i == 2) {
-            notaActual = nota2;
-            nombreActual = estudiante2;
-        } else if (i == 3) {
-            notaActual = nota3;
-            nombreActual = estudiante3;
-        } else if (i == 4) {
-            notaActual = nota4;
-            nombreActual = estudiante4;
-        } else if (i == 5) {
-            notaActual = nota5;
-            nombreActual = estudiante5;
+        if (ih == 1) {
+            notaActuald = nota1;
+            nombreActuales = estudiante1;
+        } else if (ih == 2) {
+            notaActuald = nota2;
+            nombreActuales = estudiante2;
+        } else if (ih == 3) {
+            notaActuald = nota3;
+            nombreActuales = estudiante3;
+        } else if (ih == 4) {
+            notaActuald = nota4;
+            nombreActuales = estudiante4;
+        } else if (ih == 5) {
+            notaActuald = nota5;
+            nombreActuales = estudiante5;
         }
         
-        System.out.println("Verificando: " + nombreActual + " - " + String.valueOf(notaActual));
+        System.out.println("Verificando: " + nombreActuales + " - " + String.valueOf(notaActuald));
         
-        if (notaActual > 90) {
-            System.out.println("Encontrado! " + nombreActual + " supera 90 puntos");
+        if (notaActuald > 90) {
+            System.out.println("Encontrado! " + nombreActuales + " supera 90 puntos");
             break; // Salir del bucle
         }
     }
@@ -369,14 +369,14 @@ public static void main() {
     
     // Break en for anidado
     System.out.println("\nBreak en for anidado:");
-    for (int i = 1; i <= 3; i++) {
-        System.out.println("Fila " + String.valueOf(i) + ":");
-        for (int j = 1; j <= 5; j++) {
-            if (j == 3) {
+    for (int iq = 1; iq <= 3; iq++) {
+        System.out.println("Fila " + String.valueOf(iq) + ":");
+        for (int jp = 1; jp <= 5; jp++) {
+            if (jp == 3) {
                 System.out.println("  Break en columna 3");
                 break; // Sale del for interno
             }
-            System.out.println("  Columna " + String.valueOf(j));
+            System.out.println("  Columna " + String.valueOf(jp));
         }
     }
     
@@ -385,33 +385,33 @@ public static void main() {
     
     // Continue en for
     System.out.println("Procesando solo notas pares (con continue):");
-    for (int i = 1; i <= 5; i++) {
-        int notaActual = 0;
-        String nombreActual = "";
+    for (int ir = 1; ir <= 5; ir++) {
+        int notaActualc = 0;
+        String nombreActuals = "";
         
-        if (i == 1) {
-            notaActual = nota1;
-            nombreActual = estudiante1;
-        } else if (i == 2) {
-            notaActual = nota2;
-            nombreActual = estudiante2;
-        } else if (i == 3) {
-            notaActual = nota3;
-            nombreActual = estudiante3;
-        } else if (i == 4) {
-            notaActual = nota4;
-            nombreActual = estudiante4;
-        } else if (i == 5) {
-            notaActual = nota5;
-            nombreActual = estudiante5;
+        if (ir == 1) {
+            notaActualc = nota1;
+            nombreActuals = estudiante1;
+        } else if (ir == 2) {
+            notaActualc = nota2;
+            nombreActuals = estudiante2;
+        } else if (ir == 3) {
+            notaActualc = nota3;
+            nombreActuals = estudiante3;
+        } else if (ir == 4) {
+            notaActualc = nota4;
+            nombreActuals = estudiante4;
+        } else if (ir == 5) {
+            notaActualc = nota5;
+            nombreActuals = estudiante5;
         }
         
-        if (notaActual % 2 != 0) {
-            System.out.println("Saltando " + nombreActual + " (nota impar: " + String.valueOf(notaActual) + ")");
+        if (notaActualc % 2 != 0) {
+            System.out.println("Saltando " + nombreActuals + " (nota impar: " + String.valueOf(notaActual) + ")");
             continue; // Saltar estudiantes con notas impares
         }
         
-        System.out.println("Procesando " + nombreActual + " (nota par: " + String.valueOf(notaActual) + ")");
+        System.out.println("Procesando " + nombreActuals + " (nota par: " + String.valueOf(notaActual) + ")");
     }
     
     // Continue en while

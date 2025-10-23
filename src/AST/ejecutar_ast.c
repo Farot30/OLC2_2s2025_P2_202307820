@@ -205,7 +205,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
         case AST_DECLARACION:
             GeneradorCodigoARM64(nodo);
             
-            printf("[DEBUG] Procesando declaración\n");
+            //printf("[DEBUG] Procesando declaración\n");
             
             // VERIFICACIÓN ESPECIAL PARA DECLARACIÓN DE 'mensaje'
             if (nodo->num_hijos >= 2 && nodo->hijos[1] && 
@@ -214,14 +214,14 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
                 
                 
                 // Verificar estado de la tabla de símbolos antes
-                printf("[DEBUG TABLA] Estado tabla antes de declarar 'mensaje':\n");
+                //printf("[DEBUG TABLA] Estado tabla antes de declarar 'mensaje':\n");
                 mostrarTablaSimbolos();
                 
                 verificarDeclaracion(nodo);
                 
                 
                 // Verificar estado después
-                printf("[DEBUG TABLA] Estado tabla después de declarar 'mensaje':\n");
+                //printf("[DEBUG TABLA] Estado tabla después de declarar 'mensaje':\n");
                 mostrarTablaSimbolos();
             } else {
                 verificarDeclaracion(nodo);
@@ -234,7 +234,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
                 printf("[ERROR] Asignación sin destino o valor\n");
                 return EJEC_OK;
             }
-            printf("[DEBUG] Procesando asignación\n");
+            //printf("[DEBUG] Procesando asignación\n");
             GeneradorCodigoARM64(nodo);
             
             NodoAST* destino = nodo->hijos[0];
@@ -242,7 +242,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             
             // Caso 1: Asignación a variable simple
             if (destino->tipo == AST_IDENTIFICADOR) {
-                printf("[DEBUG] Asignación a variable '%s'\n", destino->valor);
+                //printf("[DEBUG] Asignación a variable '%s'\n", destino->valor);
                 verificarAsignacionSimple(nodo);
             }
             // Caso 2: Asignación a elemento de array
@@ -318,10 +318,10 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             GeneradorCodigoARM64(nodo);
             printf("[DEBUG] Procesando print\n");
             if (nodo->num_hijos > 0 && nodo->hijos[0]) {
-                printf("[DEBUG] Evaluando expresión para print\n");
+                //printf("[DEBUG] Evaluando expresión para print\n");
                 imprimirEvaluado(nodo->hijos[0]);
             } else {
-                printf("[DEBUG] No hay expresión para imprimir\n");
+                //printf("[DEBUG] No hay expresión para imprimir\n");
                 printf("\n");  // Print empty line if no expression
                 capture_print_output("\n");
             }
@@ -349,11 +349,11 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
                 if (nodo->valor && strcmp(nodo->valor, "++") == 0) {
                     simbolo->valor.v.i++;
                     GeneradorCodigoARM64(nodo);
-                    printf("[DEBUG] Variable '%s' incrementada a: %d\n", nombreVar, simbolo->valor.v.i);
+                    //printf("[DEBUG] Variable '%s' incrementada a: %d\n", nombreVar, simbolo->valor.v.i);
                 } else if (nodo->valor && strcmp(nodo->valor, "--") == 0) {
                     simbolo->valor.v.i--;
                     GeneradorCodigoARM64(nodo);
-                    printf("[DEBUG] Variable '%s' decrementada a: %d\n", nombreVar, simbolo->valor.v.i);
+                    //printf("[DEBUG] Variable '%s' decrementada a: %d\n", nombreVar, simbolo->valor.v.i);
                 }
                 
                 simbolo->valor.inicializado = 1;
@@ -376,14 +376,14 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             
         case AST_SWITCH:
             GeneradorCodigoARM64(nodo);
-            
+            /*
             contexto_break++;
             contexto_continue++;
             ResultadoEjecucion res_switch = EjecturarNodoSwitch(nodo);
             contexto_break--;
             contexto_continue--;
             return res_switch;
-            
+            */
            return EJEC_OK;
         case AST_WHILE:
             GeneradorCodigoARM64(nodo);
@@ -416,13 +416,14 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return resFORV;
         case AST_BREAK:
             GeneradorCodigoARM64(nodo);
-            printf("[DEBUG AST_BREAK] Ejecutando break\n");
-            return ejecutarSentenciaBreak(nodo);
-            
+            //printf("[DEBUG AST_BREAK] Ejecutando break\n");
+            //return ejecutarSentenciaBreak(nodo);
+            return EJEC_OK;
         case AST_CONTINUE:
             GeneradorCodigoARM64(nodo);
-            printf("[DEBUG AST_CONTINUE] Ejecutando continue\n");
-            return ejecutarSentenciaContinue(nodo);
+            //printf("[DEBUG AST_CONTINUE] Ejecutando continue\n");
+            //return ejecutarSentenciaContinue(nodo);
+            return EJEC_OK;
         case AST_DECLARACION_VECTOR:
             GeneradorCodigoARM64(nodo);
             printf("[DEBUG] Procesando declaración de vector\n");

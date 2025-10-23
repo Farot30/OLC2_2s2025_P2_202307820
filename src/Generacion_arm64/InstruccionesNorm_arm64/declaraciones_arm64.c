@@ -41,7 +41,7 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
             pos = gen->buffer + offset;
         }
 
-        // **VERIFICAR SI LA POSICIÓN ANTERIOR ES UNA ETIQUETA SIN SALTO DE LÍNEA**
+        // **✅ AGREGAR SALTO DE LÍNEA SI ES NECESARIO**
         if (offset > 0 && *(pos - 1) != '\n') {
             // Insertar salto de línea antes del código
             char codigoConSalto[len_codigo + 2];
@@ -62,29 +62,8 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
             memcpy(pos, codigo, len_codigo);
         }
     } else {
-        // Si no encuentra el marcador de salida, buscar el punto de entrada
-        const char* start_marker = "    // Punto de entrada del programa\n";
-        pos = strstr(gen->buffer, start_marker);
-        if (pos) {
-            // Insertar justo después del comentario de punto de entrada
-            pos += strlen(start_marker);
-            size_t offset = pos - gen->buffer;
-            size_t len_actual = strlen(gen->buffer);
-            size_t len_codigo = strlen(codigo);
-
-            // Redimensionar buffer si es necesario
-            if (len_actual + len_codigo + 1 >= gen->buffer_size) {
-                gen->buffer_size = len_actual + len_codigo + 1024;
-                gen->buffer = realloc(gen->buffer, gen->buffer_size);
-            }
-
-            // Mover el contenido para hacer espacio
-            memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
-            memcpy(gen->buffer + offset, codigo, len_codigo);
-        } else {
-            // Si no encuentra ningún marcador, agregar al final
-            agregarCodigoAlBuffer(gen, codigo);
-        }
+        // Si no encuentra el marcador de salida, agregar al final
+        agregarCodigoAlBuffer(gen, codigo);
     }
 }
 

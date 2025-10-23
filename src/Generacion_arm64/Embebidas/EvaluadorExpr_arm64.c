@@ -44,6 +44,9 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
     ResultadoExprEmbebida res = {0};
     if (!expr) return res;
 
+    memset(res.codigo, 0, sizeof(res.codigo));
+    memset(res.resultado, 0, sizeof(res.resultado));
+
     if (esConcatenacionSimple(expr)) {
         printf("[DEBUG CONCAT SIMPLE] Se genera printf optimizado\n");
         char nombreFormato[64];
@@ -105,207 +108,214 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
     }
     // 1. Operaciones aritméticas o concatenación
     if (expr->tipo == AST_OPERACION) {
-
-            // --- OPERACIÓN ARITMÉTICA ---
-            char buffer[256];
-            ResultadoExprEmbebida izq = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
-            ResultadoExprEmbebida der = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
-            strcat(res.codigo, izq.codigo);
-            strcat(res.codigo, der.codigo);
-            int regRes = *regIndex;
-            // Puedes mejorar esto para soportar otros operadores
-            if (strcmp(expr->valor, "+") == 0)
-                snprintf(buffer, sizeof(buffer), "    add w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "-") == 0)
-                snprintf(buffer, sizeof(buffer), "    sub w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "*") == 0)
-                snprintf(buffer, sizeof(buffer), "    mul w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "/") == 0)
-                snprintf(buffer, sizeof(buffer), "    sdiv w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "%") == 0) {
-                // ARM64: a % b = a - (a / b) * b
-                // Usamos w1 para a, w2 para b, w3 para resultado
-                snprintf(buffer, sizeof(buffer),
-                    "    udiv w3, %s, %s\n"   // w3 = a / b
-                    "    msub w1, w3, %s, %s\n", // w1 = a - (a / b) * b
-                    izq.resultado, der.resultado, der.resultado, izq.resultado);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w1");
-                res.tipo = TIPO_INT;
-                (*regIndex)++;
-                return res;
-            }else if (strcmp(expr->valor, "&") == 0)
-                snprintf(buffer, sizeof(buffer), "    and w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "|") == 0)
-                snprintf(buffer, sizeof(buffer), "    orr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "^") == 0)
-                snprintf(buffer, sizeof(buffer), "    eor w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "<<") == 0)
-                snprintf(buffer, sizeof(buffer), "    lsl w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, ">>") == 0)
-                snprintf(buffer, sizeof(buffer), "    lsr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
-            else if (strcmp(expr->valor, "==") == 0) {
-                if (izq.tipo == TIPO_STRING && der.tipo == TIPO_STRING) {
-                    // **COMPARACIÓN DE STRINGS CON strcmp**
-                    char buffer[512];
-                    
-                    // Cargar primer string en x0
-                    if (expr->hijos[0]->tipo == AST_IDENTIFICADOR) {
-                        snprintf(buffer, sizeof(buffer),
-                            "    ldr x0, =%s\n"
-                            "    ldr x0, [x0]\n", expr->hijos[0]->valor);
-                    } else if (expr->hijos[0]->tipo == AST_STRING) {
-                        // Si es literal, cargar su dirección
-                        snprintf(buffer, sizeof(buffer),
-                            "    ldr x0, =%s\n", izq.resultado);
-                    }
-                    strcat(res.codigo, buffer);
-                    
-                    // Cargar segundo string en x1
-                    if (expr->hijos[1]->tipo == AST_IDENTIFICADOR) {
-                        snprintf(buffer, sizeof(buffer),
-                            "    ldr x1, =%s\n"
-                            "    ldr x1, [x1]\n", expr->hijos[1]->valor);
-                    } else if (expr->hijos[1]->tipo == AST_STRING) {
-                        // Si es literal, cargar su dirección
-                        snprintf(buffer, sizeof(buffer),
-                            "    ldr x1, =%s\n", der.resultado);
-                    }
-                    strcat(res.codigo, buffer);
-                    
-                    // Llamar a strcmp
-                    snprintf(buffer, sizeof(buffer),
-                        "    bl strcmp\n"
-                        "    cmp w0, #0\n"
-                        "    cset w0, eq\n");
-                    strcat(res.codigo, buffer);
-                    
-                    snprintf(res.resultado, sizeof(res.resultado), "w0");
-                    res.tipo = TIPO_BOOLEAN;
-                    (*regIndex)++;
-                    return res;
-                } else {
-                    // **COMPARACIÓN NUMÉRICA**
-                    char buffer[256];
-                    snprintf(buffer, sizeof(buffer),
-                        "    cmp %s, %s\n"
-                        "    cset w%d, eq\n"
-                        "    mov w0, w%d\n",
-                        izq.resultado, der.resultado, regRes-2, regRes-2);
-                    strcat(res.codigo, buffer);
-                    snprintf(res.resultado, sizeof(res.resultado), "w0");
-                    res.tipo = TIPO_BOOLEAN;
-                    (*regIndex)++;
-                    return res;
-                }
-            }
-            else if (strcmp(expr->valor, "!=") == 0) {
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, %s\n"
-                    "    cset w%d, ne\n"
-                    "    mov w0, w%d\n", // ✅ AGREGAR ESTA LÍNEA
-                    izq.resultado, der.resultado, regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w0");
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }
-            else if (strcmp(expr->valor, "<") == 0) {
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, %s\n"
-                    "    cset w%d, lt\n"
-                    "    mov w0, w%d\n", // ✅ AGREGAR ESTA LÍNEA
-                    izq.resultado, der.resultado, regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w0");
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }
-            else if (strcmp(expr->valor, "<=") == 0) {
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, %s\n"
-                    "    cset w%d, le\n"
-                    "    mov w0, w%d\n", // ✅ AGREGAR ESTA LÍNEA
-                    izq.resultado, der.resultado, regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w0");
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }
-            else if (strcmp(expr->valor, ">") == 0) {
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, %s\n"
-                    "    cset w%d, gt\n"
-                    "    mov w0, w%d\n", // ✅ AGREGAR ESTA LÍNEA
-                    izq.resultado, der.resultado, regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w0");
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }
-            else if (strcmp(expr->valor, ">=") == 0) {
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, %s\n"
-                    "    cset w%d, ge\n"
-                    "    mov w0, w%d\n", // ✅ MOVER RESULTADO A w0
-                    izq.resultado, der.resultado, regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w0");
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }else if (strcmp(expr->valor, "&&") == 0) {
-                // wA = izq.resultado, wB = der.resultado, wN = resultado
-                snprintf(buffer, sizeof(buffer),
-                    "    and w%d, %s, %s\n"
-                    "    cmp w%d, #0\n"
-                    "    cset w%d, ne\n",
-                    regRes-2, izq.resultado, der.resultado,
-                    regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            } else if (strcmp(expr->valor, "||") == 0) {
-                // wA = izq.resultado, wB = der.resultado, wN = resultado
-                snprintf(buffer, sizeof(buffer),
-                    "    orr w%d, %s, %s\n"
-                    "    cmp w%d, #0\n"
-                    "    cset w%d, ne\n",
-                    regRes-2, izq.resultado, der.resultado,
-                    regRes-2, regRes-2);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            } else if (strcmp(expr->valor, "!") == 0) {
-                // wA = resultado del hijo, wN = resultado
-                ResultadoExprEmbebida hijo = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
-                strcat(res.codigo, hijo.codigo);
-                snprintf(buffer, sizeof(buffer),
-                    "    cmp %s, #0\n"
-                    "    cset w%d, eq\n",
-                    hijo.resultado, *regIndex);
-                strcat(res.codigo, buffer);
-                snprintf(res.resultado, sizeof(res.resultado), "w%d", *regIndex);
-                res.tipo = TIPO_BOOLEAN;
-                (*regIndex)++;
-                return res;
-            }
-            else
-                snprintf(buffer, sizeof(buffer), "    // Operador no soportado: %s\n", expr->valor);
+        char buffer[256];
+        
+        if (strcmp(expr->valor, "&&") == 0) {
+            printf("[DEBUG AND] Iniciando evaluación de &&\n");
+            printf("[DEBUG AND] regIndex inicial: %d\n", *regIndex);
+            
+            // Evaluar izquierda
+            printf("[DEBUG AND] Evaluando operando izquierdo\n");
+            ResultadoExprEmbebida izq_and = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+            printf("[DEBUG AND] Código izquierdo:\n%s\n", izq_and.codigo);
+            printf("[DEBUG AND] Resultado izquierdo: %s (tipo: %d), regIndex después: %d\n", 
+                   izq_and.resultado, izq_and.tipo, *regIndex);
+            
+            strcat(res.codigo, izq_and.codigo);
+            
+            // Guardar en registro temporal
+            int regTempIzq = (*regIndex)++;
+            printf("[DEBUG AND] Guardando resultado izquierdo en w%d\n", regTempIzq);
+            snprintf(buffer, sizeof(buffer), 
+                "    mov w%d, %s\n", regTempIzq, izq_and.resultado);
             strcat(res.codigo, buffer);
-            snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
-            res.tipo = TIPO_INT; // Puedes deducir el tipo real si lo necesitas
+            
+            // Evaluar derecha
+            printf("[DEBUG AND] Evaluando operando derecho\n");
+            ResultadoExprEmbebida der_and = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
+            printf("[DEBUG AND] Código derecho:\n%s\n", der_and.codigo);
+            printf("[DEBUG AND] Resultado derecho: %s (tipo: %d), regIndex después: %d\n", 
+                   der_and.resultado, der_and.tipo, *regIndex);
+            
+            strcat(res.codigo, der_and.codigo);
+            
+            // Hacer AND
+            printf("[DEBUG AND] Generando instrucción AND entre w%d y %s\n", 
+                   regTempIzq, der_and.resultado);
+            snprintf(buffer, sizeof(buffer),
+                "    and w0, w%d, %s\n"
+                "    cmp w0, #0\n"
+                "    cset w0, ne\n",
+                regTempIzq, der_and.resultado);
+            strcat(res.codigo, buffer);
+            
+            printf("[DEBUG AND] Código final generado:\n%s\n", res.codigo);
+            
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            return res;
+        }
+        else if (strcmp(expr->valor, "||") == 0) {
+            printf("[DEBUG OR] Iniciando evaluación de ||\n");
+            
+            ResultadoExprEmbebida izq_or = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+            strcat(res.codigo, izq_or.codigo);
+            
+            int regTempIzq = (*regIndex)++;
+            snprintf(buffer, sizeof(buffer), 
+                "    mov w%d, %s\n", regTempIzq, izq_or.resultado);
+            strcat(res.codigo, buffer);
+            
+            ResultadoExprEmbebida der_or = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
+            strcat(res.codigo, der_or.codigo);
+            
+            snprintf(buffer, sizeof(buffer),
+                "    orr w0, w%d, %s\n"
+                "    cmp w0, #0\n"
+                "    cset w0, ne\n",
+                regTempIzq, der_or.resultado);
+            strcat(res.codigo, buffer);
+            
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            return res;
+        }
+        else if (strcmp(expr->valor, "!") == 0) {
+            ResultadoExprEmbebida hijo = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+            strcat(res.codigo, hijo.codigo);
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, #0\n"
+                "    cset w%d, eq\n",
+                hijo.resultado, *regIndex);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", *regIndex);
+            res.tipo = TIPO_BOOLEAN;
             (*regIndex)++;
             return res;
+        }
         
+        // ✅ PARA OTROS OPERADORES: EVALUAR AQUÍ
+        printf("[DEBUG OP] Evaluando operador '%s'\n", expr->valor);
+        ResultadoExprEmbebida izq = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
+        ResultadoExprEmbebida der = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
+        strcat(res.codigo, izq.codigo);
+        strcat(res.codigo, der.codigo);
+        int regRes = *regIndex;
+
+        // Puedes mejorar esto para soportar otros operadores
+        if (strcmp(expr->valor, "+") == 0)
+            snprintf(buffer, sizeof(buffer), "    add w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "-") == 0)
+            snprintf(buffer, sizeof(buffer), "    sub w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "*") == 0)
+            snprintf(buffer, sizeof(buffer), "    mul w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "/") == 0)
+            snprintf(buffer, sizeof(buffer), "    sdiv w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "%") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    udiv w3, %s, %s\n"
+                "    msub w1, w3, %s, %s\n",
+                izq.resultado, der.resultado, der.resultado, izq.resultado);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w1");
+            res.tipo = TIPO_INT;
+            (*regIndex)++;
+            return res;
+        }
+        else if (strcmp(expr->valor, "&") == 0)
+            snprintf(buffer, sizeof(buffer), "    and w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "|") == 0)
+            snprintf(buffer, sizeof(buffer), "    orr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "^") == 0)
+            snprintf(buffer, sizeof(buffer), "    eor w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "<<") == 0)
+            snprintf(buffer, sizeof(buffer), "    lsl w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, ">>") == 0)
+            snprintf(buffer, sizeof(buffer), "    lsr w%d, %s, %s\n", regRes-2, izq.resultado, der.resultado);
+        else if (strcmp(expr->valor, "==") == 0) {
+            if (izq.tipo == TIPO_STRING && der.tipo == TIPO_STRING) {
+                // ... código strcmp existente ...
+            } else {
+                snprintf(buffer, sizeof(buffer),
+                    "    cmp %s, %s\n"
+                    "    cset w%d, eq\n"
+                    "    mov w0, w%d\n",
+                    izq.resultado, der.resultado, regRes-2, regRes-2);
+                strcat(res.codigo, buffer);
+                snprintf(res.resultado, sizeof(res.resultado), "w0");
+                res.tipo = TIPO_BOOLEAN;
+                (*regIndex)++;
+                return res;
+            }
+        }
+        else if (strcmp(expr->valor, "!=") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, %s\n"
+                "    cset w%d, ne\n"
+                "    mov w0, w%d\n",
+                izq.resultado, der.resultado, regRes-2, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+        }
+        else if (strcmp(expr->valor, "<") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, %s\n"
+                "    cset w%d, lt\n"
+                "    mov w0, w%d\n",
+                izq.resultado, der.resultado, regRes-2, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+        }
+        else if (strcmp(expr->valor, "<=") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, %s\n"
+                "    cset w%d, le\n"
+                "    mov w0, w%d\n",
+                izq.resultado, der.resultado, regRes-2, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+        }
+        else if (strcmp(expr->valor, ">") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, %s\n"
+                "    cset w%d, gt\n"
+                "    mov w0, w%d\n",
+                izq.resultado, der.resultado, regRes-2, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+        }
+        else if (strcmp(expr->valor, ">=") == 0) {
+            snprintf(buffer, sizeof(buffer),
+                "    cmp %s, %s\n"
+                "    cset w%d, ge\n"
+                "    mov w0, w%d\n",
+                izq.resultado, der.resultado, regRes-2, regRes-2);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w0");
+            res.tipo = TIPO_BOOLEAN;
+            (*regIndex)++;
+            return res;
+        }
+        else
+            snprintf(buffer, sizeof(buffer), "    // Operador no soportado: %s\n", expr->valor);
+        
+        strcat(res.codigo, buffer);
+        snprintf(res.resultado, sizeof(res.resultado), "w%d", regRes-2);
+        res.tipo = TIPO_INT;
+        (*regIndex)++;
+        return res;
     }
 
     // 2. Embebidas: String.valueOf, parseInt, etc.
