@@ -26,7 +26,6 @@ void generarCodigoIFElseIF(GeneradorDeclaraciones* gen, NodoAST* nodoIF);
 
 // Funciones auxiliares
 EtiquetasIF crearEtiquetasIF();
-void evaluarCondicionBooleanaMejorada(GeneradorDeclaraciones* gen, NodoAST* condicion, char* codigoResultado);
 void generarBloqueMejorado(GeneradorDeclaraciones* gen, NodoAST* bloque);
 
 #endif 

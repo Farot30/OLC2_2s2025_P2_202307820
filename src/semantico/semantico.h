@@ -6,6 +6,5 @@
 
 extern int error_semantico;
 const char* nombreTipo(TipoDato tipo);
-int verificarSemantica(NodoAST* raiz);
 
 #endif

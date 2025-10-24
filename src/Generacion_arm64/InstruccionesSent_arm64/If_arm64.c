@@ -21,49 +21,6 @@ EtiquetasIF crearEtiquetasIF() {
     return etiquetas;
 }
 
-void evaluarCondicionBooleanaMejorada(GeneradorDeclaraciones* gen, NodoAST* condicion, char* codigoResultado) {
-    if (!condicion || !codigoResultado) return;
-    
-    char buffer[512] = "";
-    
-    if (condicion->tipo == AST_OPERACION) {
-        int regIndex = 1;
-        generarCodigoRecursivoBoolean(condicion, buffer, &regIndex, gen);
-        strcpy(codigoResultado, buffer);
-        return;
-    }
-    
-    switch (condicion->tipo) {
-        case AST_BOOLEAN:
-            if (strcmp(condicion->valor, "true") == 0) {
-                strcat(buffer, "    mov w0, #1\n");
-            } else {
-                strcat(buffer, "    mov w0, #0\n");
-            }
-            break;
-            
-        case AST_IDENTIFICADOR: {
-            snprintf(buffer, sizeof(buffer),
-                "    adrp x1, %s\n"
-                "    add x1, x1, :lo12:%s\n"
-                "    ldr w0, [x1]\n", condicion->valor, condicion->valor);
-            break;
-        }
-        
-        case AST_NUMERO: {
-            int valor = atoi(condicion->valor);
-            snprintf(buffer, sizeof(buffer), "    mov w0, #%d\n", valor != 0 ? 1 : 0);
-            break;
-        }
-        
-        default:
-            strcat(buffer, "    mov w0, #0\n");
-            break;
-    }
-    
-    strcpy(codigoResultado, buffer);
-}
-
 void generarBloqueMejorado(GeneradorDeclaraciones* gen, NodoAST* bloque) {
     if (!bloque) return;
     (void)gen;

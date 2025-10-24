@@ -318,6 +318,47 @@ static bool procesarParteParaFormato(GeneradorDeclaraciones* gen, ParteConcatena
         printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
         return true;
     }
+
+    if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG CONCAT] Procesando acceso a vector\n");
+        
+        // Generar acceso al vector
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoArgs, resAcceso.codigo);
+        
+        // Agregar formato según el tipo
+        if (tipo == TIPO_INT || tipo == 6) {
+            strcat(formato, "%d");
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex - 2, resAcceso.resultado);
+            strcat(codigoArgs, buffer);
+            (*regIndex)++;
+        } else if (tipo == TIPO_FLOAT || tipo == TIPO_DOUBLE) {
+            strcat(formato, "%f");
+            if (tipo == TIPO_FLOAT) {
+                snprintf(buffer, sizeof(buffer), "    fcvt d%d, %s\n", *regIndex - 1, resAcceso.resultado);
+                strcat(codigoArgs, buffer);
+            }
+            (*regIndex)++;
+        } else if (tipo == TIPO_CHAR) {
+            strcat(formato, "%c");
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resAcceso.resultado);
+            strcat(codigoArgs, buffer);
+            (*regIndex)++;
+        } else if (tipo == TIPO_STRING) {
+            strcat(formato, "%s");
+            snprintf(buffer, sizeof(buffer), "    mov x%d, %s\n", *regIndex, resAcceso.resultado);
+            strcat(codigoArgs, buffer);
+            (*regIndex)++;
+        } else if (tipo == TIPO_BOOLEAN) {
+            strcat(formato, "%d");
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resAcceso.resultado);
+            strcat(codigoArgs, buffer);
+            (*regIndex)++;
+        }
+        
+        printf("[DEPURACION] Parte soportada (acceso vector): tipo=%d\n", tipo);
+        return true;
+    }
     
     // 3. OTROS TIPOS (int, float, string variables, etc.)
     switch (tipo) {

@@ -13,6 +13,7 @@
 #include "InstruccionesSent_arm64/Break_continue_arm64.h"
 #include "Vectores_arm64/declaracionesVec_arm64.h"
 #include "Embebidas/String_valueOf.h"
+#include "InstruccionesSent_arm64/ForEach_arm64.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -309,6 +310,10 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
         case AST_FOR:
             printf("[DEBUG] Nodo FOR detectado arm64\n");
             generarCodigoFor(&gen->gen_declaraciones, nodo);
+            break;
+        case AST_FOR_VECTOR:
+            printf("[DEBUG] Nodo FOR-EACH detectado arm64\n");
+            generarCodigoForEach(&gen->gen_declaraciones, nodo);
             break;
         case AST_WHILE:
             printf("[DEBUG] Nodo WHILE detectado arm64\n");

@@ -408,12 +408,17 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
 */
             return EJEC_OK;
         case AST_FOR_VECTOR:
+        printf("entrando al for EACH en ejecutar_ast\n");
+            GeneradorCodigoARM64(nodo);
+            /*
             contexto_break++;
             contexto_continue++;
             ResultadoEjecucion resFORV = ejecutarSentenciaForVector(nodo);
             contexto_break--;
             contexto_continue--;
             return resFORV;
+            */
+           return EJEC_OK;
         case AST_BREAK:
             GeneradorCodigoARM64(nodo);
             //printf("[DEBUG AST_BREAK] Ejecutando break\n");

@@ -6,6 +6,7 @@
 #include "../../semantico/tipos.h"
 #include "../../semantico/semantico.h"
 #include "../../AST/ast.h"
+#include "../Vectores_arm64/AccesoVector_arm64.h"
 #include <string.h>
 #include <stdlib.h>
 void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archivo, 
@@ -367,6 +368,32 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
                 "    str d0, [x1]\n", nombreVariable); // Ajusta si usas otro registro para double/float
         }
         insertarEnSeccionText(gen, codigo);
+        return;
+    }
+
+    if (valorNodo && valorNodo->tipo == AST_ACCESO) {
+        printf("[DEBUG DECLARACION] Acceso a vector en asignación a '%s'\n", nombreVariable);
+        
+        // 1. Declaración en .data
+        if (tipo == TIPO_STRING) {
+            snprintf(codigo, sizeof(codigo),
+                "%s: .quad str_lit_%s\n"
+                "str_lit_%s: .asciz \"\"\n",
+                nombreVariable, nombreVariable, nombreVariable);
+        } else if (tipo == TIPO_FLOAT) {
+            snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
+        } else if (tipo == TIPO_DOUBLE) {
+            snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
+        } else if (tipo == TIPO_CHAR) {
+            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
+        } else {
+            snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
+        }
+        insertarEnSeccionData(gen, codigo);
+        
+        // 2. Generar código de acceso
+        generarAccesoVectorARM64(gen, valorNodo, nombreVariable);
+        
         return;
     }
 

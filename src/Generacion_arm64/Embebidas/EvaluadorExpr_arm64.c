@@ -3,6 +3,7 @@
 #include "../Embebidas/String_valueOf.h"
 #include "../InstruccionesNorm_arm64/StringBuilder.h"
 #include "../Impresion_arm64.h"
+#include "../Vectores_arm64/AccesoVector_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -421,6 +422,12 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
             return res;
         }
     }
+
+    if (expr->tipo == AST_ACCESO) {
+        printf("[DEBUG] Evaluando acceso a vector en expresión\n");
+        return generarAccesoVectorARM64(gen, expr, regIndex);
+    }
+
     if (expr->tipo == AST_CARACTER) {
         char buffer[128];
         snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", *regIndex, (int)expr->valor[0]);

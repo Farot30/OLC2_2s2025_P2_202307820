@@ -4249,7 +4249,7 @@ yyreduce:
   case 192: /* instruccion_for: TOKEN_FOR TOKEN_PARIZQ declaracion TOKEN_DOS_PUNTOS expresion TOKEN_PARDER bloque  */
 #line 1545 "src/parser/parser.y"
                                                                                         {
-        (yyval.nodo) = crearNodo(AST_FOR_VECTOR, "FOR");
+        (yyval.nodo) = crearNodo(AST_FOR_VECTOR, "FOR EACH");
         (yyval.nodo)->linea = (yylsp[-6]).first_line; (yyval.nodo)->columna = (yylsp[-6]).first_column;
         agregarHijo((yyval.nodo), (yyvsp[-4].nodo));
         agregarHijo((yyval.nodo), (yyvsp[-2].nodo));
@@ -4261,7 +4261,7 @@ yyreduce:
   case 193: /* instruccion_for: TOKEN_FOR TOKEN_PARIZQ tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_IDENTIFICADOR TOKEN_DOS_PUNTOS expresion TOKEN_PARDER bloque  */
 #line 1552 "src/parser/parser.y"
                                                                                                                                                    {
-        (yyval.nodo) = crearNodo(AST_FOR_VECTOR, "FOR");
+        (yyval.nodo) = crearNodo(AST_FOR_VECTOR, "FOR EACH");
         (yyval.nodo)->linea = (yylsp[-9]).first_line; (yyval.nodo)->columna = (yylsp[-9]).first_column;
 
         // Crear nodo de declaración de vector temporal: int[] par

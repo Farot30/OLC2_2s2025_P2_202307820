@@ -1543,14 +1543,14 @@ instruccion_for:
         agregarHijo($$, $9);
     }
     | TOKEN_FOR TOKEN_PARIZQ declaracion TOKEN_DOS_PUNTOS expresion TOKEN_PARDER bloque {
-        $$ = crearNodo(AST_FOR_VECTOR, "FOR");
+        $$ = crearNodo(AST_FOR_VECTOR, "FOR EACH");
         $$->linea = @1.first_line; $$->columna = @1.first_column;
         agregarHijo($$, $3);
         agregarHijo($$, $5);
         agregarHijo($$, $7);
     }
     | TOKEN_FOR TOKEN_PARIZQ tipo_primitivo TOKEN_CORCHETEIZQ TOKEN_CORCHETEDER TOKEN_IDENTIFICADOR TOKEN_DOS_PUNTOS expresion TOKEN_PARDER bloque {
-        $$ = crearNodo(AST_FOR_VECTOR, "FOR");
+        $$ = crearNodo(AST_FOR_VECTOR, "FOR EACH");
         $$->linea = @1.first_line; $$->columna = @1.first_column;
 
         // Crear nodo de declaración de vector temporal: int[] par

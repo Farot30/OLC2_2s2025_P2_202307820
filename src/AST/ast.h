@@ -86,5 +86,7 @@ void graphvizAST(NodoAST* nodo);
 void graphvizAST_ToFile(NodoAST* nodo, FILE* f);
 int exportarAST(NodoAST* nodo, const char* rutaDot, const char* rutaPNG);
 void interpretarAccesoEscritura(NodoAST* nodo);
+NodoAST* buscarDeclaracionPorIdentificador(NodoAST* raiz, TipoNodoAST tipoDecl, const char* nombreId);
+NodoAST* buscarNodoEnAST(NodoAST* raiz, TipoNodoAST tipoBuscad, const char* valorBuscad);
 
 #endif
