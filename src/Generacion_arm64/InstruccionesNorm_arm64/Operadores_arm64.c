@@ -26,34 +26,26 @@ TipoDato detectarTipoLiteral(const char* valor) {
 int contadorConstantesRoData = 0; // contador global para nombres únicos
 
 void insertarConstanteDoubleRoData(GeneradorDeclaraciones* gen, const char* nombreBase, double valor) {
-    char nombre[64];
-    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%s: .double %f\n", nombre, valor);
+    snprintf(buffer, sizeof(buffer), "%s: .double %f\n", nombreBase, valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
 void insertarConstanteFloatRoData(GeneradorDeclaraciones* gen, const char* nombreBase, float valor) {
-    char nombre[64];
-    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%s: .float %f\n", nombre, valor);
+    snprintf(buffer, sizeof(buffer), "%s: .float %f\n", nombreBase, valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
 void insertarConstanteCharRoData(GeneradorDeclaraciones* gen, const char* nombreBase, char valor) {
-    char nombre[64];
-    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%s: .byte %d\n", nombre, (int)valor);
+    snprintf(buffer, sizeof(buffer), "%s: .byte %d\n", nombreBase, (int)valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
 void insertarConstanteIntRoData(GeneradorDeclaraciones* gen, const char* nombreBase, int valor) {
-    char nombre[64];
-    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%s: .word %d\n", nombre, valor);
+    snprintf(buffer, sizeof(buffer), "%s: .word %d\n", nombreBase, valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
@@ -374,7 +366,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
             } else if (tipoLiteral == TIPO_FLOAT || tipoLiteral == TIPO_DOUBLE) {
                 // Convertir float/double a int
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -389,7 +381,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                     "    scvtf %s, w2\n", atoi(nodo->valor), registro);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -397,7 +389,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                     "    ldr %s, [x2]\n", nombreConst, registro);
             } else if (tipoLiteral == TIPO_DOUBLE) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -412,7 +404,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                     "    scvtf %s, w2\n", atoi(nodo->valor), registro);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -421,7 +413,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                     "    fcvt %s, s2\n", nombreConst, registro);
             } else if (tipoLiteral == TIPO_DOUBLE) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -433,7 +425,7 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                 snprintf(buffer, sizeof(buffer), "    mov %s, #%d\n", registro, atoi(nodo->valor) != 0);
             } else if (tipoLiteral == TIPO_FLOAT || tipoLiteral == TIPO_DOUBLE) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -578,7 +570,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                     "    scvtf d%d, w%d\n", regIzq, atoi(izq->valor), regIzq, regIzq);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(izq->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(izq->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(izq->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -587,7 +579,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                     "    fcvt d%d, s%d\n", regIzq, nombreConst, regIzq, regIzq, regIzq, regIzq);
             } else { // TIPO_DOUBLE
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(izq->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(izq->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(izq->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -633,7 +625,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                     "    scvtf d%d, w%d\n", regDer, atoi(der->valor), regDer, regDer);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(der->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(der->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(der->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -642,7 +634,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                     "    fcvt d%d, s%d\n", regDer, nombreConst, regDer, regDer, regDer, regDer);
             } else { // TIPO_DOUBLE
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(der->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(der->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(der->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -740,7 +732,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                 "    scvtf d0, w1\n", atoi(nodo->valor));
         } else if (tipoLiteral == TIPO_FLOAT) {
             char nombreConst[32];
-            snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+            snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
             for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
             insertarConstanteFloatRoData(gen, nombreConst, atof(nodo->valor));
             snprintf(buffer, sizeof(buffer),
@@ -749,7 +741,7 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                 "    fcvt d0, s1\n", nombreConst);
         } else { // TIPO_DOUBLE
             char nombreConst[32];
-            snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+            snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData);
             for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
             insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
             snprintf(buffer, sizeof(buffer),
@@ -784,7 +776,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                     "    scvtf s%d, w%d\n", regIzq, atoi(izq->valor), regIzq, regIzq);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(izq->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(izq->valor), contadorConstantesRoData++);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(izq->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -792,7 +784,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                     "    ldr s%d, [x%d]\n", regIzq, nombreConst, regIzq, regIzq);
             } else { // TIPO_DOUBLE
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(izq->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(izq->valor), contadorConstantesRoData);
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(izq->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -825,7 +817,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                     "    scvtf s%d, w%d\n", regDer, atoi(der->valor), regDer, regDer);
             } else if (tipoLiteral == TIPO_FLOAT) {
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(der->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(der->valor), contadorConstantesRoData++ );
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteFloatRoData(gen, nombreConst, atof(der->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -833,7 +825,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                     "    ldr s%d, [x%d]\n", regDer, nombreConst, regDer, regDer);
             } else { // TIPO_DOUBLE
                 char nombreConst[32];
-                snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(der->valor));
+                snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(der->valor), contadorConstantesRoData++ );
                 for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
                 insertarConstanteDoubleRoData(gen, nombreConst, atof(der->valor));
                 snprintf(buffer, sizeof(buffer),
@@ -907,7 +899,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                 "    scvtf s0, w1\n", atoi(nodo->valor));
         } else if (tipoLiteral == TIPO_FLOAT) {
             char nombreConst[32];
-            snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+            snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
             for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
             insertarConstanteFloatRoData(gen, nombreConst, atof(nodo->valor));
             snprintf(buffer, sizeof(buffer),
@@ -915,7 +907,7 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                 "    ldr s0, [x1]\n", nombreConst);
         } else { // TIPO_DOUBLE
             char nombreConst[32];
-            snprintf(nombreConst, sizeof(nombreConst), "valor%g", atof(nodo->valor));
+            snprintf(nombreConst, sizeof(nombreConst), "valor%g_%d", atof(nodo->valor), contadorConstantesRoData++);
             for (int i = 0; nombreConst[i]; i++) if (nombreConst[i] == '.') nombreConst[i] = '_';
             insertarConstanteDoubleRoData(gen, nombreConst, atof(nodo->valor));
             snprintf(buffer, sizeof(buffer),

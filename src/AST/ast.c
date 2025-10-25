@@ -113,6 +113,7 @@ static const char* nombreNodoTipo(TipoNodoAST t){
         case AST_NULL: return "NULL";
         case AST_DECLARACION_CONST: return "DECLARACION_CONST";
         case AST_DECLARACION_VECTOR_TEMP: return "DECLARACION_VECTOR_TEMP";
+        case AST_DO_WHILE: return "DO_WHILE";
         
          // Agregar más casos según sea necesario
         default: return "UNK";

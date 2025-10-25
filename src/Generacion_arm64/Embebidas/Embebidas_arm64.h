@@ -7,5 +7,7 @@
 #include "../../AST/ast.h"
 
 void generarStringJoinARM64(GeneradorDeclaraciones* gen, const char* nombreDestino, NodoAST* nodo);
+void generarArraysIndexOfARM64(GeneradorDeclaraciones* gen, const char* nombreDestino, NodoAST* nodo);
+
 
 #endif

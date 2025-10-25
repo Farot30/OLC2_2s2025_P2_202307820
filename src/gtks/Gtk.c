@@ -6,7 +6,7 @@
 void clear_treeview(GtkListStore* store) {
     gtk_list_store_clear(store);
 }
-
+static char* get_code(GtkTextBuffer* b);
 // Función para llenar la tabla de errores desde texto formateado
 void fill_error_treeview(GtkListStore* store, const char* error_text) {
     clear_treeview(store);
@@ -83,6 +83,64 @@ void fill_error_treeview(GtkListStore* store, const char* error_text) {
         
         line_start = line_end + 1;
     }
+}
+
+void on_save_file(GtkButton* btn, gpointer data){
+    (void)btn;
+    AppUI* ui = (AppUI*)data;
+
+    GtkWidget* dialog = gtk_file_chooser_dialog_new(
+        "Guardar archivo USL",
+        GTK_WINDOW(ui->window),
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        "_Cancelar", GTK_RESPONSE_CANCEL,
+        "_Guardar", GTK_RESPONSE_ACCEPT,
+        NULL
+    );
+
+    // Filtro para archivos .usl
+    GtkFileFilter* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Archivos USL (*.usl)");
+    gtk_file_filter_add_pattern(filter, "*.usl");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    // Sugerir extensión .usl
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), "archivo.usl");
+
+    gint result = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (result == GTK_RESPONSE_ACCEPT) {
+        char* filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        if (filename) {
+            // Verificar extensión .usl
+            size_t len = strlen(filename);
+            if (len < 4 || strcmp(filename + len - 4, ".usl") != 0) {
+                // Agregar extensión si falta
+                char* newname = g_strdup_printf("%s.usl", filename);
+                g_free(filename);
+                filename = newname;
+            }
+            // Obtener el texto del buffer de código
+            char* code = get_code(ui->buf_code);
+            FILE* file = fopen(filename, "w");
+            if (file) {
+                fwrite(code, 1, strlen(code), file);
+                fclose(file);
+            } else {
+                GtkWidget* error_dialog = gtk_message_dialog_new(
+                    GTK_WINDOW(ui->window),
+                    GTK_DIALOG_DESTROY_WITH_PARENT,
+                    GTK_MESSAGE_ERROR,
+                    GTK_BUTTONS_OK,
+                    "No se pudo guardar el archivo:\n%s", filename
+                );
+                gtk_dialog_run(GTK_DIALOG(error_dialog));
+                gtk_widget_destroy(error_dialog);
+            }
+            g_free(code);
+            g_free(filename);
+        }
+    }
+    gtk_widget_destroy(dialog);
 }
 
 void fill_symbol_treeview(GtkListStore* store, const char* symbol_text) {
@@ -417,6 +475,11 @@ void ui_build(AppUI* ui){
     gtk_box_pack_start(GTK_BOX(hbar), bClear, FALSE,FALSE,0);
     gtk_box_pack_start(GTK_BOX(hbar), bLoad, FALSE,FALSE,0);
     gtk_box_pack_start(GTK_BOX(vbox), hbar, FALSE,FALSE,0);
+
+    // ...dentro de ui_build...
+    GtkWidget* bSave = gtk_button_new_with_label("Guardar");
+    gtk_box_pack_start(GTK_BOX(hbar), bSave, FALSE,FALSE,0);
+    g_signal_connect(bSave,"clicked",G_CALLBACK(on_save_file),ui);
 
     GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(vbox), paned, TRUE,TRUE,0);

@@ -1,0 +1,14 @@
+public static void main(){
+
+	System.out.println("=== SISTEMA DE CALCULO CIENTIFICO ===");
+    
+    // Declaración de variables
+    int numeroEntero = 42;
+    float numeroFlotante = 3.14f;
+    double numeroDoble = 2.718281828;
+    char caracter = 'A';
+    boolean esVerdadero = true;
+    String cadenaTexto = "Resultado";
+
+
+}

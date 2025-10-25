@@ -116,6 +116,7 @@ static                      { yylval.str = strdup("static"); return TOKEN_STATIC
 main                        { yylval.str = strdup("main"); return TOKEN_main; }
 null                        { yylval.str = strdup("null"); return TOKEN_NULL; }
 final                       { yylval.str = strdup("final"); return TOKEN_FINAL; }
+do                           { yylval.str = strdup("do"); return TOKEN_DO; }
 
 [0-9]+                      { yylval.str = strdup(yytext); return TOKEN_NUMERO; }
 [0-9]+\.[0-9]+[fF]          { yylval.str = strdup(yytext); return TOKEN_FLOAT_LITERAL; }

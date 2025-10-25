@@ -560,6 +560,18 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             contexto_funcion--;
             return res;
         }
+
+        case AST_DO_WHILE:
+            GeneradorCodigoARM64(nodo);
+            /*
+            contexto_break++;
+            contexto_continue++;
+            ResultadoEjecucion resDOWHILE = ejecutarSentenciaDoWhile(nodo);
+            contexto_break--;
+            contexto_continue--;
+            return resDOWHILE;
+            */
+           return EJEC_OK;
         case AST_LLAMADA: {
             // Verificar si es una función void o con retorno
             if (nodo->num_hijos >= 1 && nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {

@@ -76,6 +76,7 @@ BACKEND_SRC = \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/ForEach_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Do_While_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Parseos_arm64.c \
 	
 
@@ -145,6 +146,7 @@ GUI_SRC = \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/ForEach_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Do_While_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Parseos_arm64.c \
 
 

@@ -61,6 +61,7 @@
 %token <str> TOKEN_RETURN
 %token <str> TOKEN_PUBLIC TOKEN_STATIC TOKEN_main
 %token <str> TOKEN_NULL TOKEN_FINAL
+%token <str> TOKEN_DO
 
 /* Tokens para asignaciones compuestas */
 %token <str> TOKEN_MAS_IGUAL TOKEN_MENOS_IGUAL TOKEN_POR_IGUAL
@@ -82,7 +83,8 @@
 %type <nodo> instruccion_while instruccion_break instruccion_continue
 %type <nodo> instruccion_for lista_expresiones_join
 %type <nodo> Funcion_void Llamadas lista_parametros Funcion_parametros parametros instruccion_return
-%type <str> tipo_primitivo TipoConCorchetes
+%type <nodo> instruccion_do_while
+%type <str> tipo_primitivo TipoConCorchetes 
 
 /* ========== PRECEDENCIA CORREGIDA ========== */
 %right TOKEN_IGUAL TOKEN_MAS_IGUAL TOKEN_MENOS_IGUAL TOKEN_POR_IGUAL TOKEN_DIV_IGUAL TOKEN_MOD_IGUAL 
@@ -233,6 +235,7 @@ sentencia:
     | intruccion_switch             { $$ = $1; }
     | instruccion_while             { $$ = $1; }
     | instruccion_for               { $$ = $1; }
+    | instruccion_do_while      { $$ = $1; }
     | declaracion_vector TOKEN_PUNTOCOMA      { $$ = $1; }
     | declaracion_matriz TOKEN_PUNTOCOMA      { $$ = $1; }
     | declaracion_array_multidimensional TOKEN_PUNTOCOMA { $$ = $1; }
@@ -250,6 +253,8 @@ sentencia:
         $$ = NULL;
     }
 ;
+
+
 
 expresion_sentencia:
       postfix_incremento
@@ -581,6 +586,24 @@ Dimensiones:
     | Dimensiones TOKEN_CORCHETEIZQ TOKEN_NUMERO TOKEN_CORCHETEDER {
         agregarHijo($1, crearNodo(AST_NUMERO, $3));
         $$ = $1;
+    }
+;
+
+instruccion_do_while:
+    TOKEN_DO bloque TOKEN_WHILE TOKEN_PARIZQ expresion TOKEN_PARDER TOKEN_PUNTOCOMA {
+        $$ = crearNodo(AST_DO_WHILE, "do-while");
+        $$->linea = @1.first_line; 
+        $$->columna = @1.first_column;
+        agregarHijo($$, $2);
+        agregarHijo($$, $5);
+    }
+    | TOKEN_DO bloque TOKEN_WHILE TOKEN_PARIZQ error TOKEN_PARDER TOKEN_PUNTOCOMA {
+        addErrorSintactico("Expresión inválida en condición do-while", "global", @5.first_line, @5.first_column);
+        $$ = crearNodo(AST_DO_WHILE, "do-while");
+        $$->linea = @1.first_line; 
+        $$->columna = @1.first_column;
+        agregarHijo($$, $2);
+        agregarHijo($$, crearNodo(AST_BOOLEAN, "false"));
     }
 ;
 

@@ -16,6 +16,8 @@
 #include "InstruccionesSent_arm64/ForEach_arm64.h"
 #include "Vectores_arm64/EscrituraVector_arm64.h"
 #include "Embebidas/Parseos_arm64.h"
+#include "Embebidas/Embebidas_arm64.h"
+#include "InstruccionesSent_arm64/Do_While_arm64.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -285,7 +287,19 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                     agregarOperacionPendiente(nombreVariable, valorNodo, tipo, true);
 
                     procesarOperacionesPendientes(gen);
-                }else {
+                } else if (valorNodo->tipo == AST_INDEXOF){
+                    printf("[DEBUG DECLARACION ARM64] Arrays.indexOf para '%s'\n", nombreVariable);
+                    char codigo[128];
+                    // 1. Declaración en .data (int para el resultado)
+                    snprintf(codigo, sizeof(codigo), "%s: .word -1\n", nombreVariable);
+                    insertarEnSeccionData(&gen->gen_declaraciones, codigo);
+                    
+                    // 2. Generar código de Arrays.indexOf
+                    generarArraysIndexOfARM64(&gen->gen_declaraciones, nombreVariable, valorNodo);
+                    
+                    return;
+                }
+                 else {
                     generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
                 }
             } else {
@@ -304,6 +318,11 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             generarAsignacionARM64(&generador_principal.gen_declaraciones, nodo);
             break;
 
+        case AST_DO_WHILE:
+            printf("[DEBUG]");
+            generarCodigoDoWhile(&generador_principal.gen_declaraciones, nodo);
+            break;
+        
         case AST_ASIGNACION_COMPUESTA:
             printf("[DEBUG] Nodo de asignación compuesta detectado arm64\n");
             generarAsignacionCompuestaARM64(&generador_principal.gen_declaraciones, nodo);
