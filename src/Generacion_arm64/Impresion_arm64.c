@@ -3,6 +3,7 @@
 #include "InstruccionesNorm_arm64/Operadores_arm64.h"
 #include "EscapeSecuencia_arm64.h" 
 #include "Embebidas/EvaluadorExpr_arm64.h"
+#include "Vectores_arm64/AccesoVector_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -466,6 +467,7 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
         // Detectar el tipo del valor a imprimir
         TipoDato tipo = deducirTipoExprARM64(valorNodo, astGlobal);
         
+        
 
         // **PRIORIDAD 1: Si es concatenación, intentar generar printf optimizado**
         if (valorNodo->tipo == AST_OPERACION && strcmp(valorNodo->valor, "+") == 0) {
@@ -476,6 +478,68 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     return;
                 }
             }
+        }
+         else if (valorNodo->tipo == AST_ACCESO) {
+            if (!valorNodo->hijos[0] || !valorNodo->hijos[0]->valor) {
+                printf("[ERROR] Nodo de acceso a vector inválido en impresión\n");
+                return;
+            }
+            const char* nombreVector = valorNodo->hijos[0]->valor;
+            NodoAST* vectorDecl = buscarVectorEnAST(nombreVector);
+            if (!vectorDecl) {
+                printf("[ERROR] Vector '%s' no encontrado en AST para impresión\n", nombreVector);
+                return;
+            }
+            TipoDato tipoBase = obtenerTipoVectorDesdeAST(vectorDecl);
+            if (tipoBase == TIPO_DESCONOCIDO) {
+                printf("[ERROR] No se pudo deducir el tipo base del vector '%s' para impresión\n", nombreVector);
+                return;
+            }
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
+            if (resAcceso.resultado[0] == '\0') {
+                printf("[ERROR] No se pudo generar el acceso a vector para impresión\n");
+                return;
+            }
+            char formatoVec[64];
+            snprintf(formatoVec, sizeof(formatoVec), "format_vec_elem_%d", gen->admin_registros->contador_constantes++);
+            switch (tipoBase) {
+                case TIPO_INT:
+                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoVec);
+                    insertarEnSeccionData(gen, buffer);
+                    snprintf(buffer, sizeof(buffer),
+                        "    mov w1, %s\n"
+                        "    ldr x0, =%s\n"
+                        "    bl printf\n",
+                        resAcceso.resultado, formatoVec);
+                    strcat(codigo, buffer);
+                    break;
+                case TIPO_CHAR:
+                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoVec);
+                    insertarEnSeccionData(gen, buffer);
+                    snprintf(buffer, sizeof(buffer),
+                        "    mov w1, %s\n"
+                        "    ldr x0, =%s\n"
+                        "    bl printf\n",
+                        resAcceso.resultado, formatoVec);
+                    strcat(codigo, buffer);
+                    break;
+                case TIPO_FLOAT:
+                case TIPO_DOUBLE:
+                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoVec);
+                    insertarEnSeccionData(gen, buffer);
+                    snprintf(buffer, sizeof(buffer),
+                        "    fmov d1, %s\n"
+                        "    ldr x0, =%s\n"
+                        "    bl printf\n",
+                        resAcceso.resultado, formatoVec);
+                    strcat(codigo, buffer);
+                    break;
+                default:
+                    snprintf(buffer, sizeof(buffer), "    // Tipo no soportado para impresión de acceso vector\n");
+                    strcat(codigo, buffer);
+            }
+            insertarEnSeccionText(gen, codigo);
+            return;
         }
         // PRIORIDAD 2: String simple
         else if (tipo == TIPO_STRING) {
@@ -584,6 +648,58 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     "    bl printf\n",
                     formatoFloat);
                 strcat(codigo, buffer);
+                insertarEnSeccionText(gen, codigo);
+                return;
+            }
+
+            if (valorNodo->hijos[0]->tipo == AST_ACCESO) {
+                ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, valorNodo->hijos[0], &(int){1});
+                strcat(codigo, resAcceso.codigo);
+
+                TipoDato tipoBase = tipo;
+
+                char formatoVec[64];
+                snprintf(formatoVec, sizeof(formatoVec), "format_vec_elem_%d", gen->admin_registros->contador_constantes++);
+                switch (tipoBase) {
+                    case TIPO_INT:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_CHAR:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_BOOLEAN:
+                        // Si tienes valueOf_bool implementado, puedes usarlo aquí
+                        insertarConstantesBooleanas(gen);
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w0, %s\n"
+                            "    ldr x1, =temp_str_valueof\n"
+                            "    bl valueOf_bool\n"
+                            "    ldr x1, =temp_str_valueof\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    default:
+                        snprintf(buffer, sizeof(buffer), "    // Tipo no soportado para String.valueOf(acceso vector)\n");
+                        strcat(codigo, buffer);
+                }
                 insertarEnSeccionText(gen, codigo);
                 return;
             }

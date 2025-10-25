@@ -20,7 +20,7 @@ void generarDeclaracionVectorARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
         printf("[DEBUG VECTOR] Declarando '%s' como vector de %d elementos en .data con valores por defecto\n", nombreVector, tam);
 
         char buffer[1024];
-        buffer[0] = '\0';
+        memset(buffer, 0, sizeof(buffer)); 
 
         // Llenar con valores por defecto según tipo
         if (tipo == TIPO_INT) {

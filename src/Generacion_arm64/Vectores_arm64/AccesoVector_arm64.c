@@ -7,6 +7,7 @@
 #include "../../AST/ast.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>  
 #include <stdlib.h>
 
 extern NodoAST* astGlobal;
@@ -19,14 +20,33 @@ NodoAST* buscarVectorEnAST(const char* nombre) {
 
 
 // Función auxiliar para obtener el tipo base del vector desde el AST
-static TipoDato obtenerTipoVectorDesdeAST(NodoAST* vectorNodo) {
-    if (!vectorNodo || vectorNodo->tipo != AST_DECLARACION_VECTOR) return TIPO_INT;
-    if (vectorNodo->num_hijos < 1) return TIPO_INT;
-    
-    NodoAST* tipoNodo = vectorNodo->hijos[0];
-    if (tipoNodo->tipo != AST_TIPO || !tipoNodo->valor) return TIPO_INT;
-    
-    return obtenerTipoDesdeString(tipoNodo->valor);
+TipoDato obtenerTipoVectorDesdeAST(NodoAST* vectorNodo) {
+    if (!vectorNodo) {
+        printf("[ERROR obtenerTipoVectorDesdeAST] vectorNodo es NULL\n");
+        return TIPO_DESCONOCIDO;
+    }
+    if (vectorNodo->tipo != AST_DECLARACION_VECTOR) {
+        printf("[ERROR obtenerTipoVectorDesdeAST] Nodo no es declaración de vector (tipo=%d)\n", vectorNodo->tipo);
+        return TIPO_DESCONOCIDO;
+    }
+    if (vectorNodo->num_hijos < 1) {
+        printf("[ERROR obtenerTipoVectorDesdeAST] Vector sin hijos\n");
+        return TIPO_DESCONOCIDO;
+    }
+
+    // Buscar el primer hijo de tipo AST_TIPO que tenga valor
+    for (int i = 0; i < vectorNodo->num_hijos; i++) {
+        NodoAST* hijo = vectorNodo->hijos[i];
+        if (!hijo) continue;
+        // AST_TIPO o el valor numérico que uses para tipo (ej: 36)
+        if ((hijo->tipo == AST_TIPO || hijo->tipo == 36) && hijo->valor) {
+            TipoDato tipoDeducido = obtenerTipoDesdeString(hijo->valor);
+            printf("[DEBUG obtenerTipoVectorDesdeAST] Tipo encontrado: %s -> %d\n", hijo->valor, tipoDeducido);
+            return tipoDeducido;
+        }
+    }
+    printf("[ERROR obtenerTipoVectorDesdeAST] No se encontró el nodo de tipo en el vector\n");
+    return TIPO_DESCONOCIDO;
 }
 
 // Genera código ARM64 para acceder a un vector y devuelve información del resultado
@@ -62,6 +82,7 @@ ResultadoExprEmbebida generarAccesoVectorARM64(GeneradorDeclaraciones* gen, Nodo
         printf("[ERROR] Vector '%s' no encontrado en el AST\n", nombreVector);
         return resultado;
     }
+    printf("[DEBUG ACCESO VECTOR] Vector '%s' encontrado en AST\n", nombreVector);
 
     // ✅ OBTENER EL TIPO BASE DEL VECTOR DESDE EL AST
     TipoDato tipoVector = obtenerTipoVectorDesdeAST(vectorNodo);

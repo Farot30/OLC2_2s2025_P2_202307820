@@ -2506,7 +2506,7 @@ yyreduce:
 #line 372 "src/parser/parser.y"
                                          {
         if ((yyvsp[-2].nodo)->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Elementos");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Interna");
             agregarHijo(lista, (yyvsp[-2].nodo));
             agregarHijo(lista, (yyvsp[0].nodo));
             (yyval.nodo) = lista;
@@ -2521,7 +2521,7 @@ yyreduce:
   case 49: /* lista_elementos: expresion  */
 #line 383 "src/parser/parser.y"
                 {
-        (yyval.nodo) = crearNodo(AST_INTERNO, "Lista Elementos");
+        (yyval.nodo) = crearNodo(AST_INTERNO, "Lista Interna");
         agregarHijo((yyval.nodo), (yyvsp[0].nodo));
     }
 #line 2528 "src/parser/parser.tab.c"
@@ -2686,7 +2686,7 @@ yyreduce:
 #line 519 "src/parser/parser.y"
                                                        {
         if ((yyvsp[-2].nodo)->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Bloques");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Bloques (INTERNO)");
             agregarHijo(lista, (yyvsp[-2].nodo));
             agregarHijo(lista, (yyvsp[0].nodo));
             (yyval.nodo) = lista;
@@ -2701,7 +2701,7 @@ yyreduce:
   case 58: /* lista_bloques: lista_elementos_o_bloques  */
 #line 530 "src/parser/parser.y"
                                 {
-        (yyval.nodo) = crearNodo(AST_INTERNO, "Lista Bloques");
+        (yyval.nodo) = crearNodo(AST_INTERNO, "Lista Bloques (INTERNO)");
         agregarHijo((yyval.nodo), (yyvsp[0].nodo));
     }
 #line 2708 "src/parser/parser.tab.c"
@@ -2711,7 +2711,7 @@ yyreduce:
 #line 537 "src/parser/parser.y"
                                                   {
         // Caso: lista de elementos
-        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque");
+        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque (INTERNO)");
         agregarHijo(bloque, (yyvsp[-1].nodo));
         (yyval.nodo) = bloque;
     }
@@ -2722,7 +2722,7 @@ yyreduce:
 #line 543 "src/parser/parser.y"
                                                   {
         // Caso: bloques anidados
-        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque");
+        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque (INTERNO)");
         agregarHijo(bloque, (yyvsp[-1].nodo));
         (yyval.nodo) = bloque;
     }
@@ -2736,13 +2736,13 @@ yyreduce:
         if ((yyvsp[0].nodo) == NULL) {
             (yyval.nodo) = dim;
         } else if ((yyvsp[0].nodo)->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Dimensiones");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Dimensiones (INTERNO)");
             agregarHijo(lista, dim);
             agregarHijo(lista, (yyvsp[0].nodo));
             (yyval.nodo) = lista;
         } else {
             /* Insertar al principio de la lista */
-            NodoAST* nueva = crearNodo(AST_INTERNO, "Dimensiones");
+            NodoAST* nueva = crearNodo(AST_INTERNO, "Dimensiones (INTERNO)");
             agregarHijo(nueva, dim);
             for (int i = 0; i < (yyvsp[0].nodo)->num_hijos; i++) {
                 agregarHijo(nueva, (yyvsp[0].nodo)->hijos[i]);

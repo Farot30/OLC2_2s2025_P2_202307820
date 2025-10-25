@@ -7,6 +7,7 @@
 #include "../../semantico/semantico.h"
 #include "../../AST/ast.h"
 #include "../Vectores_arm64/AccesoVector_arm64.h"
+#include "../Embebidas/Embebidas_arm64.h"
 #include <string.h>
 #include <stdlib.h>
 void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archivo, 
@@ -18,6 +19,10 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
     gen->admin_registros = admin;
     gen->temp_str_valueof_bss_insertado = false;
     gen->contador_literales_string = 0;
+
+    if (gen->buffer) {
+        gen->buffer[0] = '\0';
+    }
 }
 extern NodoAST* astGlobal; // Declaración externa del nodo raíz del AST
 
@@ -368,6 +373,22 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
                 "    str d0, [x1]\n", nombreVariable); // Ajusta si usas otro registro para double/float
         }
         insertarEnSeccionText(gen, codigo);
+        return;
+    }
+
+    if (valorNodo && valorNodo->tipo == AST_PARSEJOIN) {
+        printf("[DEBUG DECLARACION ARM64] String.join para '%s'\n", nombreVariable);
+        
+        // 1. Declaración en .data (puntero a string)
+        snprintf(codigo, sizeof(codigo),
+            "%s: .quad str_lit_%s\n"
+            "str_lit_%s: .asciz \"\"\n",
+            nombreVariable, nombreVariable, nombreVariable);
+        insertarEnSeccionData(gen, codigo);
+        
+        // 2. Generar código de String.join
+        generarStringJoinARM64(gen, nombreVariable, valorNodo);
+        
         return;
     }
 

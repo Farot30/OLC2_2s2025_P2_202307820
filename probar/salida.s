@@ -1,5 +1,7 @@
 .global _start
-.extern itoa
+.extern parse_int
+.extern parse_double
+.extern parse_float
 .extern valuesOf_int
 .extern valueOf_bool
 .extern valueOf_float
@@ -10,15 +12,18 @@
 
 // declaraciones de variables
 .data
-format_concat_0: .asciz "Nota %d: %d\n"
-nota: .word 0
-contadorNotas: .word 0
-suma: .word 0
-str_const_3: .asciz "Procesando notas con forEach:"
-format_string_2: .asciz "%s\n"
-notasParaForeach: .word 85, 92, 78, 95, 88
-str_const_1: .asciz "\n--- FOREACH CON ARRAY SIMPLE ---"
-format_string_0: .asciz "%s\n"
+format_concat_2: .asciz "Parseando '%s' a entero: %d\n"
+format_concat_1: .asciz "Parseando '%s' a entero: %d\n"
+format_concat_0: .asciz "Parseando '%s' a entero: %d\n"
+num3: .word 0
+num2: .word 0
+num1: .word 0
+numeroTexto3: .quad str_lit_numeroTexto3
+str_lit_numeroTexto3: .asciz "789"
+numeroTexto2: .quad str_lit_numeroTexto2
+str_lit_numeroTexto2: .asciz "456"
+numeroTexto1: .quad str_lit_numeroTexto1
+str_lit_numeroTexto1: .asciz "123"
 
 // constantes
 .section .rodata
@@ -31,57 +36,54 @@ format_string_0: .asciz "%s\n"
 
 _start:
     // Punto de entrada del programa
-    ldr x0, =format_string_0
-    ldr x1, =str_const_1
-    bl printf
-    ldr x0, =format_string_2
-    ldr x1, =str_const_3
-    bl printf
-    // For-each: int nota : notasParaForeach
-foreach_init_0:
-    mov w19, #0                // Índice inicial = 0
-    mov w20, #5               // Tamaño del vector
-    ldr x21, =notasParaForeach               // Dirección base del vector
-
-foreach_loop_0:
-    // Verificar si hemos terminado
-    cmp w19, w20
-    bge foreach_end_0                     // Si índice >= tamaño, salir
-
-    // Cargar elemento actual: nota = notasParaForeach[índice]
-    ldr w22, [x21, w19, SXTW #2]  // Cargar elemento
-    ldr x23, =nota
-    str w22, [x23]              // Almacenar en variable iteradora
-
-    // Incremento: contadorNotas++
-    ldr x1, =contadorNotas
-    ldr w0, [x1]
-    add w0, w0, #1
+    ldr x1, =numeroTexto1
+    ldr x1, [x1]
+    // Integer.parseInt(string)
+    ldr x2, =numeroTexto1
+    ldr x0, [x2]              // Cargar puntero al string
+    bl parse_int               // Llamar parse_int custom (retorna en w0)
+    ldr x1, =num1
     str w0, [x1]
-    // Asignación compuesta: suma += <valor>
-    ldr x1, =suma
-    ldr w0, [x1]
-    ldr x2, =nota
-    ldr w1, [x2]
-    add w0, w0, w1
-    ldr x1, =suma
+    ldr x1, =numeroTexto2
+    ldr x1, [x1]
+    // Integer.parseInt(string)
+    ldr x2, =numeroTexto2
+    ldr x0, [x2]              // Cargar puntero al string
+    bl parse_int               // Llamar parse_int custom (retorna en w0)
+    ldr x1, =num2
+    str w0, [x1]
+    ldr x1, =numeroTexto3
+    ldr x1, [x1]
+    // Integer.parseInt(string)
+    ldr x2, =numeroTexto3
+    ldr x0, [x2]              // Cargar puntero al string
+    bl parse_int               // Llamar parse_int custom (retorna en w0)
+    ldr x1, =num3
     str w0, [x1]
     // Printf optimizado para concatenación
-    ldr x1, =contadorNotas
-    ldr w1, [x1]
-    mov w2, w1
-    ldr x2, =nota
+    ldr x1, =numeroTexto1
+    ldr x1, [x1]
+    ldr x2, =num1
     ldr w2, [x2]
     mov w3, w2
     ldr x0, =format_concat_0
     bl printf
-    // Incrementar índice y continuar
-    add w19, w19, #1
-    b foreach_loop_0
-
-foreach_end_0:
-    // Fin del for-each
-
+    // Printf optimizado para concatenación
+    ldr x1, =numeroTexto2
+    ldr x1, [x1]
+    ldr x2, =num2
+    ldr w2, [x2]
+    mov w3, w2
+    ldr x0, =format_concat_1
+    bl printf
+    // Printf optimizado para concatenación
+    ldr x1, =numeroTexto3
+    ldr x1, [x1]
+    ldr x2, =num3
+    ldr w2, [x2]
+    mov w3, w2
+    ldr x0, =format_concat_2
+    bl printf
     // Salida del programa por defecto
     mov x0, #0
     mov x8, #93

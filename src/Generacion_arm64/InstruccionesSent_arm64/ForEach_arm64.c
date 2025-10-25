@@ -16,7 +16,7 @@ extern NodoAST* astGlobal;
 static int contador_foreach = 0;
 
 // Función para obtener el tamaño de un vector desde el AST
-static int obtenerTamanioVector(NodoAST* raiz, const char* nombreVector) {
+int obtenerTamanioVector(NodoAST* raiz, const char* nombreVector) {
     if (!raiz || !nombreVector) return 0;
     
     if (raiz->tipo == AST_DECLARACION_VECTOR && raiz->num_hijos >= 2) {

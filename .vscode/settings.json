@@ -9,6 +9,7 @@
         "registros_arm64.h": "c",
         "stringbuilder.h": "c",
         "semantico.h": "c",
-        "evaluadorexpr_arm64.h": "c"
+        "evaluadorexpr_arm64.h": "c",
+        "accesovector_arm64.h": "c"
     }
 }

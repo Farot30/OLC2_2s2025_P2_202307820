@@ -18,5 +18,6 @@ typedef struct {
 // - hijos[1]: Vector/Array a iterar (ej: notasParaForeach)
 // - hijos[2]: Bloque de código del for-each
 void generarCodigoForEach(GeneradorDeclaraciones* gen, NodoAST* nodoForEach);
+int obtenerTamanioVector(NodoAST* raiz, const char* nombreVector);
 
 #endif

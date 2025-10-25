@@ -23,26 +23,35 @@ TipoDato detectarTipoLiteral(const char* valor) {
     // Si no tiene punto decimal, es entero
     return TIPO_INT;
 }
-void insertarConstanteDoubleRoData(GeneradorDeclaraciones* gen, const char* nombre, double valor) {
+int contadorConstantesRoData = 0; // contador global para nombres únicos
+
+void insertarConstanteDoubleRoData(GeneradorDeclaraciones* gen, const char* nombreBase, double valor) {
+    char nombre[64];
+    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "%s: .double %f\n", nombre, valor);
-    // Usa la función de insertar en .rodata de tu generador de constantes
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
-void insertarConstanteFloatRoData(GeneradorDeclaraciones* gen, const char* nombre, float valor) {
+void insertarConstanteFloatRoData(GeneradorDeclaraciones* gen, const char* nombreBase, float valor) {
+    char nombre[64];
+    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "%s: .float %f\n", nombre, valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
-void insertarConstanteCharRoData(GeneradorDeclaraciones* gen, const char* nombre, char valor) {
+void insertarConstanteCharRoData(GeneradorDeclaraciones* gen, const char* nombreBase, char valor) {
+    char nombre[64];
+    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "%s: .byte %d\n", nombre, (int)valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
 }
 
-void insertarConstanteIntRoData(GeneradorDeclaraciones* gen, const char* nombre, int valor) {
+void insertarConstanteIntRoData(GeneradorDeclaraciones* gen, const char* nombreBase, int valor) {
+    char nombre[64];
+    snprintf(nombre, sizeof(nombre), "%s_%d", nombreBase, contadorConstantesRoData++);
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "%s: .word %d\n", nombre, valor);
     insertarEnSeccionRoData((GeneradorConstantesARM64*)gen, buffer);
@@ -353,7 +362,6 @@ void generarOperacionGeneral(const char* operador, const char* regResultado, con
     
     strcat(codigoOperacion, buffer);
 }
-
 void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDestino, GeneradorDeclaraciones* gen, char* codigoOperacion) {
     char buffer[256];
     

@@ -536,6 +536,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return EJEC_OK;
         }
         case AST_ACCESO_ESCRITURA: {
+            GeneradorCodigoARM64(nodo);
             printf("[DEBUG] Procesando acceso de escritura\n");
             
             interpretarAccesoEscritura(nodo);

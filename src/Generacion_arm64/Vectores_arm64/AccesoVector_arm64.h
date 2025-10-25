@@ -4,6 +4,7 @@
 #include "../../AST/ast.h"
 #include "../InstruccionesNorm_arm64/declaraciones_arm64.h"
 #include "../Embebidas/EvaluadorExpr_arm64.h"
+#include "../../semantico/tipos.h"
 
 // Genera código ARM64 para acceso a un vector y devuelve el resultado
 // Esta función se integra con el evaluador recursivo de expresiones
@@ -12,5 +13,6 @@ ResultadoExprEmbebida generarAccesoVectorARM64(GeneradorDeclaraciones* gen, Nodo
 // Versión simplificada para asignaciones
 void generarAccesoVectorParaAsignacion(GeneradorDeclaraciones* gen, NodoAST* nodo, const char* nombreDestino);
 NodoAST* buscarVectorEnAST(const char* nombre);
+TipoDato obtenerTipoVectorDesdeAST(NodoAST* nodoVector);
 
 #endif

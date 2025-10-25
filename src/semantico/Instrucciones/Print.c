@@ -54,28 +54,28 @@ void imprimirEvaluado(NodoAST* expr) {
     }
     
     ValorSimbolo v = evaluarExpr(expr);
-    printf("[DEBUG] Resultado evaluación - inicializado: %d, tipo: %d\n", 
-           v.inicializado, v.tipo);
+    //printf("[DEBUG] Resultado evaluación - inicializado: %d, tipo: %d\n", 
+    //       v.inicializado, v.tipo);
     
     if (!v.inicializado) {
-        printf("[PRINT] (sin valor)\n");
+        //printf("[PRINT] (sin valor)\n");
         capture_print_output("[PRINT] (sin valor)\n");
         return;
     }
-    printf("[DEBUG] Tipo de valor a imprimir: %d\n", v.tipo);
+    //printf("[DEBUG] Tipo de valor a imprimir: %d\n", v.tipo);
 
     char buffer[256];
     switch (v.tipo) {
         case TIPO_INT:
-        printf("[DEBUG] Entrando a TIPO_INT\n");
+        //printf("[DEBUG] Entrando a TIPO_INT\n");
             snprintf(buffer, sizeof(buffer), "%d", v.v.i);
             break;
         case TIPO_FLOAT:
-            printf("[DEBUG] Entrando a TIPO_FLOAT\n");
+            //printf("[DEBUG] Entrando a TIPO_FLOAT\n");
             snprintf(buffer, sizeof(buffer), "%f", v.v.f);
             break;
         case TIPO_DOUBLE:
-            printf("[DEBUG] Entrando a TIPO_DOUBLE\n");
+            //printf("[DEBUG] Entrando a TIPO_DOUBLE\n");
             snprintf(buffer, sizeof(buffer), "%lf", v.v.d);
             break;
         case TIPO_CHAR: {
@@ -95,11 +95,11 @@ void imprimirEvaluado(NodoAST* expr) {
             break;
         }
         case TIPO_BOOLEAN:
-            printf("[DEBUG] Entrando a TIPO_BOOLEAN\n");
+            //printf("[DEBUG] Entrando a TIPO_BOOLEAN\n");
             snprintf(buffer, sizeof(buffer), "%s", v.v.b ? "true" : "false");
             break;
         case TIPO_STRING:
-            printf("[DEBUG] Entrando a TIPO_STRING\n");
+           // printf("[DEBUG] Entrando a TIPO_STRING\n");
             printf("[DEBUG PRINT] v.v.s = '%s'\n", v.v.s ? v.v.s : "null");
             snprintf(buffer, sizeof(buffer), "%s", v.v.s ? v.v.s : "null");
             break;

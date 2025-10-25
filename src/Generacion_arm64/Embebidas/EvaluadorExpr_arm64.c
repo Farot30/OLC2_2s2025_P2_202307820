@@ -4,6 +4,7 @@
 #include "../InstruccionesNorm_arm64/StringBuilder.h"
 #include "../Impresion_arm64.h"
 #include "../Vectores_arm64/AccesoVector_arm64.h"
+#include "Embebidas_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -112,37 +113,37 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
         char buffer[256];
         
         if (strcmp(expr->valor, "&&") == 0) {
-            printf("[DEBUG AND] Iniciando evaluación de &&\n");
-            printf("[DEBUG AND] regIndex inicial: %d\n", *regIndex);
+            //printf("[DEBUG AND] Iniciando evaluación de &&\n");
+            //printf("[DEBUG AND] regIndex inicial: %d\n", *regIndex);
             
             // Evaluar izquierda
-            printf("[DEBUG AND] Evaluando operando izquierdo\n");
+            //printf("[DEBUG AND] Evaluando operando izquierdo\n");
             ResultadoExprEmbebida izq_and = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
-            printf("[DEBUG AND] Código izquierdo:\n%s\n", izq_and.codigo);
-            printf("[DEBUG AND] Resultado izquierdo: %s (tipo: %d), regIndex después: %d\n", 
-                   izq_and.resultado, izq_and.tipo, *regIndex);
+            //printf("[DEBUG AND] Código izquierdo:\n%s\n", izq_and.codigo);
+            //printf("[DEBUG AND] Resultado izquierdo: %s (tipo: %d), regIndex después: %d\n", 
+            //       izq_and.resultado, izq_and.tipo, *regIndex);
             
             strcat(res.codigo, izq_and.codigo);
             
             // Guardar en registro temporal
             int regTempIzq = (*regIndex)++;
-            printf("[DEBUG AND] Guardando resultado izquierdo en w%d\n", regTempIzq);
+            //printf("[DEBUG AND] Guardando resultado izquierdo en w%d\n", regTempIzq);
             snprintf(buffer, sizeof(buffer), 
                 "    mov w%d, %s\n", regTempIzq, izq_and.resultado);
             strcat(res.codigo, buffer);
             
             // Evaluar derecha
-            printf("[DEBUG AND] Evaluando operando derecho\n");
+            //printf("[DEBUG AND] Evaluando operando derecho\n");
             ResultadoExprEmbebida der_and = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
-            printf("[DEBUG AND] Código derecho:\n%s\n", der_and.codigo);
-            printf("[DEBUG AND] Resultado derecho: %s (tipo: %d), regIndex después: %d\n", 
-                   der_and.resultado, der_and.tipo, *regIndex);
+            //printf("[DEBUG AND] Código derecho:\n%s\n", der_and.codigo);
+            //printf("[DEBUG AND] Resultado derecho: %s (tipo: %d), regIndex después: %d\n", 
+            //       der_and.resultado, der_and.tipo, *regIndex);
             
             strcat(res.codigo, der_and.codigo);
             
             // Hacer AND
-            printf("[DEBUG AND] Generando instrucción AND entre w%d y %s\n", 
-                   regTempIzq, der_and.resultado);
+            //printf("[DEBUG AND] Generando instrucción AND entre w%d y %s\n", 
+            //       regTempIzq, der_and.resultado);
             snprintf(buffer, sizeof(buffer),
                 "    and w0, w%d, %s\n"
                 "    cmp w0, #0\n"
@@ -195,7 +196,7 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
             return res;
         }
         
-        // ✅ PARA OTROS OPERADORES: EVALUAR AQUÍ
+        // PARA OTROS OPERADORES: EVALUAR AQUÍ
         printf("[DEBUG OP] Evaluando operador '%s'\n", expr->valor);
         ResultadoExprEmbebida izq = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
         ResultadoExprEmbebida der = generarExprEmbebidaARM64(gen, expr->hijos[1], regIndex);
@@ -355,6 +356,20 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
         strcat(res.codigo, buffer);
         strcpy(res.resultado, "x0"); // x0 tendrá la dirección del string
         res.tipo = TIPO_STRING;
+        return res;
+    }
+
+    if (expr->tipo == AST_PARSEJOIN) {
+        char nombreTemp[64];
+        snprintf(nombreTemp, sizeof(nombreTemp), "__temp_join_%d", *regIndex);
+        generarStringJoinARM64(gen, nombreTemp, expr);
+        
+        snprintf(res.codigo, sizeof(res.codigo),
+            "    ldr x%d, =%s\n"
+            "    ldr x%d, [x%d]\n", *regIndex, nombreTemp, *regIndex, *regIndex);
+        snprintf(res.resultado, sizeof(res.resultado), "x%d", *regIndex);
+        res.tipo = TIPO_STRING;
+        (*regIndex)++;
         return res;
     }
 

@@ -463,6 +463,6 @@ int verificarDeclaracionVector(NodoAST* nodo) {
         return 0;
     }
 
-    printf("[DEBUG verificarDeclaracionVector] Finalizando verificación exitosamente\n");
+    //printf("[DEBUG verificarDeclaracionVector] Finalizando verificación exitosamente\n");
     return 1;
 }

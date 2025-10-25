@@ -592,18 +592,31 @@ NodoAST* buscarNodoEnAST(NodoAST* raiz, TipoNodoAST tipo, const char* nombre) {
     return NULL;
 }
 
+
+void imprimirVectoresEnAST(NodoAST* nodo) {
+    if (!nodo) return;
+    if (nodo->tipo == AST_DECLARACION_VECTOR && nodo->num_hijos >= 2) {
+        NodoAST* idNodo = nodo->hijos[1];
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && idNodo->valor)
+            printf("[DEBUG] Vector en AST: %s\n", idNodo->valor);
+    }
+    for (int i = 0; i < nodo->num_hijos; i++)
+        imprimirVectoresEnAST(nodo->hijos[i]);
+}
+
 NodoAST* buscarDeclaracionPorIdentificador(NodoAST* raiz, TipoNodoAST tipoDecl, const char* nombreId) {
     if (!raiz || !nombreId) return NULL;
     
     // Si es una declaración del tipo buscado
     if (raiz->tipo == tipoDecl && raiz->num_hijos >= 2) {
-        // El identificador suele ser el segundo hijo (índice 1)
         NodoAST* idNodo = raiz->hijos[1];
-        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && 
-            idNodo->valor && strcmp(idNodo->valor, nombreId) == 0) {
+        printf("[DEPURACION] Revisando vector: tipo=%d, id=%s\n", raiz->tipo, idNodo && idNodo->valor ? idNodo->valor : "(null)");
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && idNodo->valor && strcmp(idNodo->valor, nombreId) == 0) {
+            printf("[DEPURACION] Vector encontrado: %s\n", nombreId);
             return raiz;
         }
     }
+    //imprimirVectoresEnAST(raiz);
     
     // Buscar recursivamente en los hijos
     for (int i = 0; i < raiz->num_hijos; i++) {

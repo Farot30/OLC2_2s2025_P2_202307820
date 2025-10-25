@@ -50,7 +50,7 @@ void guardarEstadoVariable(const char* nombre, ValorSimbolo valor) {
     estadosVariables[numEstadosGuardados].valor = valor;
     numEstadosGuardados++;
     
-    printf("[DEBUG RECURSION] Guardando estado de variable '%s'\n", nombre);
+    //printf("[DEBUG RECURSION] Guardando estado de variable '%s'\n", nombre);
 }
 
 // Busca y restaura el último estado guardado de una variable
@@ -60,7 +60,7 @@ ValorSimbolo buscarEstadoVariable(const char* nombre) {
     
     for (int i = numEstadosGuardados - 1; i >= 0; i--) {
         if (strcmp(estadosVariables[i].nombre, nombre) == 0) {
-            printf("[DEBUG RECURSION] Restaurando estado de variable '%s'\n", nombre);
+            //printf("[DEBUG RECURSION] Restaurando estado de variable '%s'\n", nombre);
             return estadosVariables[i].valor;
         }
     }
@@ -96,9 +96,9 @@ static void imprimirValor(ValorSimbolo valor) {
 
 
 ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
-    printf("[DEBUG OPERADOR] === INICIANDO evaluarOperacion ===\n");
-    printf("[DEBUG OPERADOR] Operador: '%s'\n", e->valor);
-    printf("[DEBUG OPERADOR] Tipo a: %d, Tipo b: %d\n", a.tipo, b.tipo);
+    //printf("[DEBUG OPERADOR] === INICIANDO evaluarOperacion ===\n");
+    //printf("[DEBUG OPERADOR] Operador: '%s'\n", e->valor);
+    //printf("[DEBUG OPERADOR] Tipo a: %d, Tipo b: %d\n", a.tipo, b.tipo);
 
     ValorSimbolo r;
     memset(&r, 0, sizeof(r));
@@ -106,7 +106,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
 
     // Verificar que ambos operandos estén inicializados
     if (!a.inicializado || !b.inicializado) {
-        printf("[DEBUG OPERADOR] ERROR: Uno de los operandos no está inicializado\n");
+        //printf("[DEBUG OPERADOR] ERROR: Uno de los operandos no está inicializado\n");
         return r;
     }
 
@@ -116,7 +116,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
         if (contexto_funcion > 0 && strcmp(ambitoActual(), "fibonacci") == 0) {
             // Si ambos operandos son llamadas a función, manejar diferente
             if (e->hijos[0]->tipo == AST_LLAMADA && e->hijos[1]->tipo == AST_LLAMADA) {
-                printf("[DEBUG RECURSION] Suma especial de llamadas a función en fibonacci\n");
+                //printf("[DEBUG RECURSION] Suma especial de llamadas a función en fibonacci\n");
                 
                 // Manejar el resultado de manera consistente
                 ValorSimbolo resultado = {0};
@@ -129,8 +129,8 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
                 
                 resultado.v.i = valor1 + valor2;
                 
-                printf("[DEBUG RECURSION] Suma de valores recursivos: %d + %d = %d\n",
-                    valor1, valor2, resultado.v.i);
+                //printf("[DEBUG RECURSION] Suma de valores recursivos: %d + %d = %d\n",
+                 //   valor1, valor2, resultado.v.i);
                 
                 return resultado;
             }
@@ -162,7 +162,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             if (str_a) free(str_a);
             if (str_b) free(str_b);
             
-            printf("[DEBUG OPERADOR] Concatenación realizada: '%s'\n", r.v.s);
+            //printf("[DEBUG OPERADOR] Concatenación realizada: '%s'\n", r.v.s);
             return r;
         }
         // Si ambos son numéricos, hacer suma aritmética
@@ -179,7 +179,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             else if (r.tipo == TIPO_FLOAT) r.v.f = (float)resultado;
             else r.v.i = (int)resultado;
 
-            printf("[DEBUG OPERADOR] Suma aritmética realizada: %f\n", resultado);
+            //printf("[DEBUG OPERADOR] Suma aritmética realizada: %f\n", resultado);
             return r;
         }
         else {
@@ -199,12 +199,12 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
                 r.v.b = esNull;
             else
                 r.v.b = !esNull;
-            printf("[DEBUG OPERADOR] Comparación string %s null: %s\n", e->valor, r.v.b ? "true" : "false");
+            //printf("[DEBUG OPERADOR] Comparación string %s null: %s\n", e->valor, r.v.b ? "true" : "false");
             return r;
         }
         if ((a.tipo == TIPO_NULL && b.tipo == TIPO_NULL)) {
             r.v.b = (strcmp(e->valor, "==") == 0);
-            printf("[DEBUG OPERADOR] Comparación null %s null: %s\n", e->valor, r.v.b ? "true" : "false");
+           // printf("[DEBUG OPERADOR] Comparación null %s null: %s\n", e->valor, r.v.b ? "true" : "false");
             return r;
         }
 
@@ -241,7 +241,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             double vb = convertirANumero(b);
             r.v.b = (strcmp(e->valor, "==") == 0) ? (va == vb) : (va != vb);
         } else {
-            printf("[EVALUADOR] Comparación '%s' con tipos incompatibles: %d vs %d\n", e->valor, a.tipo, b.tipo);
+            //printf("[EVALUADOR] Comparación '%s' con tipos incompatibles: %d vs %d\n", e->valor, a.tipo, b.tipo);
             r.v.b = 0;
         }
         printf("[DEBUG OPERADOR] Comparación '%s' resultado: %s\n", e->valor, r.v.b ? "true" : "false");
@@ -262,7 +262,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             else if (strcmp(e->valor, ">=") == 0) r.v.b = (va >= vb);
             else if (strcmp(e->valor, "<=") == 0) r.v.b = (va <= vb);
 
-            printf("[DEBUG OPERADOR] Comparación '%s' resultado: %s\n", e->valor, r.v.b ? "true" : "false");
+            //printf("[DEBUG OPERADOR] Comparación '%s' resultado: %s\n", e->valor, r.v.b ? "true" : "false");
             return r;
         } else {
             printf("[EVALUADOR] Comparación '%s' solo válida para tipos numéricos\n", e->valor);
@@ -276,7 +276,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_BOOLEAN;
             r.inicializado = 1;
             r.v.b = (strcmp(e->valor, "&&") == 0) ? (a.v.b && b.v.b) : (a.v.b || b.v.b);
-            printf("[DEBUG OPERADOR] Operación lógica '%s' resultado: %s\n", e->valor, r.v.b ? "true" : "false");
+            //printf("[DEBUG OPERADOR] Operación lógica '%s' resultado: %s\n", e->valor, r.v.b ? "true" : "false");
             return r;
         } else {
             printf("[EVALUADOR] Operador '%s' solo válido para boolean\n", e->valor);
@@ -290,7 +290,7 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_BOOLEAN;
             r.inicializado = 1;
             r.v.b = !a.v.b;
-            printf("[DEBUG OPERADOR] Negación resultado: %s\n", r.v.b ? "true" : "false");
+            //printf("[DEBUG OPERADOR] Negación resultado: %s\n", r.v.b ? "true" : "false");
             return r;
         } else {
             printf("[EVALUADOR] Operador '!' solo válido para boolean\n");
@@ -306,15 +306,15 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
                 case TIPO_DOUBLE: r.v.d = -a.v.d; break;
                 case TIPO_CHAR:   r.v.c = -a.v.c; break;
                 default: 
-                    printf("[EVALUADOR] Operador unario '-' no válido para tipo %d\n", a.tipo);
+                   // printf("[EVALUADOR] Operador unario '-' no válido para tipo %d\n", a.tipo);
                     r.inicializado = 0;
                     break;
             }
-            printf("[DEBUG OPERADOR] Negación unaria: resultado = ");
+           // printf("[DEBUG OPERADOR] Negación unaria: resultado = ");
             imprimirValor(r);
             return r;
         } else {
-            printf("[EVALUADOR] Operador unario '-' solo válido para tipos numéricos\n");
+            //printf("[EVALUADOR] Operador unario '-' solo válido para tipos numéricos\n");
             return r;
         }
     }
@@ -346,8 +346,8 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
 
             r.inicializado = 1;
 
-            printf("[DEBUG OPERADOR] Operación '%s' resultado: %f, tipo=%d\n", 
-                e->valor, resultado, r.tipo);
+           // printf("[DEBUG OPERADOR] Operación '%s' resultado: %f, tipo=%d\n", 
+            //    e->valor, resultado, r.tipo);
             return r;
         } else {
             printf("[EVALUADOR] Operación '%s' solo válida para tipos numéricos\n", e->valor);
@@ -359,8 +359,8 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_INT;
             r.inicializado = 1;
             r.v.i = a.v.i >> b.v.i;
-            printf("[DEBUG OPERADOR] Desplazamiento derecho: %d >> %d = %d\n", 
-                a.v.i, b.v.i, r.v.i);
+           // printf("[DEBUG OPERADOR] Desplazamiento derecho: %d >> %d = %d\n", 
+           //     a.v.i, b.v.i, r.v.i);
             return r;
         } else {
             printf("[EVALUADOR] Operador '>>' solo válido para enteros\n");
@@ -375,11 +375,11 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_INT;
             r.inicializado = 1;
             r.v.i = valorA << valorB;
-            printf("[DEBUG OPERADOR] Desplazamiento izquierdo: %d << %d = %d\n", 
-                valorA, valorB, r.v.i);
+           // printf("[DEBUG OPERADOR] Desplazamiento izquierdo: %d << %d = %d\n", 
+             //   valorA, valorB, r.v.i);
             return r;
         } else {
-            printf("[EVALUADOR] Operador '<<' solo válido para enteros y char\n");
+           // printf("[EVALUADOR] Operador '<<' solo válido para enteros y char\n");
             return r;
         }
     }
@@ -393,10 +393,10 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_INT;
             r.inicializado = 1;
             r.v.i = valorA ^ valorB;
-            printf("[DEBUG OPERADOR] XOR: %d ^ %d = %d\n", valorA, valorB, r.v.i);
+          //  printf("[DEBUG OPERADOR] XOR: %d ^ %d = %d\n", valorA, valorB, r.v.i);
             return r;
         } else {
-            printf("[EVALUADOR] Operador '^' solo válido para enteros y char\n");
+            //printf("[EVALUADOR] Operador '^' solo válido para enteros y char\n");
             return r;
         }
     }
@@ -410,10 +410,10 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_INT;
             r.inicializado = 1;
             r.v.i = valorA | valorB;
-            printf("[DEBUG OPERADOR] OR: %d | %d = %d\n", valorA, valorB, r.v.i);
+           // printf("[DEBUG OPERADOR] OR: %d | %d = %d\n", valorA, valorB, r.v.i);
             return r;
         } else {
-            printf("[EVALUADOR] Operador '|' solo válido para enteros y char\n");
+           // printf("[EVALUADOR] Operador '|' solo válido para enteros y char\n");
             return r;
         }
     }
@@ -427,15 +427,15 @@ ValorSimbolo evaluarOperaciones(NodoAST* e, ValorSimbolo a, ValorSimbolo b) {
             r.tipo = TIPO_INT;
             r.inicializado = 1;
             r.v.i = valorA & valorB;
-            printf("[DEBUG OPERADOR] AND: %d & %d = %d\n", valorA, valorB, r.v.i);
+            //printf("[DEBUG OPERADOR] AND: %d & %d = %d\n", valorA, valorB, r.v.i);
             return r;
         } else {
-            printf("[EVALUADOR] Operador '&' solo válido para enteros y char\n");
+            //printf("[EVALUADOR] Operador '&' solo válido para enteros y char\n");
             return r;
         }
     }
 
-    printf("[EVALUADOR] Operador '%s' no reconocido\n", e->valor);
+    //printf("[EVALUADOR] Operador '%s' no reconocido\n", e->valor);
     return r;
 }
 
@@ -482,7 +482,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
             // Interpretar como unsigned char para soportar valores > 127
             r.v.c = e->valor && *e->valor ? (unsigned char)e->valor[0] : '\0';
             r.inicializado = 1;
-            printf("[DEBUG] Carácter leído: %c (%d)\n", r.v.c, r.v.c);
+            //printf("[DEBUG] Carácter leído: %c (%d)\n", r.v.c, r.v.c);
             return r;
         }
         case AST_BOOLEAN: {
@@ -499,12 +499,12 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
         // En Evaluador.c, modificar el caso AST_IDENTIFICADOR:
         case AST_IDENTIFICADOR: {
     // Intentar buscar como variable primero
-            printf("[DEBUG evaluarExpr] Buscando identificador '%s'\n", e->valor);
+           // printf("[DEBUG evaluarExpr] Buscando identificador '%s'\n", e->valor);
             Simbolo* s = buscarSimboloConAmbito(e->valor);
             if (s) {
-                printf("[DEBUG evaluarExpr] Símbolo '%s' encontrado, inicializado=%d, tipo=%d\n", s->nombre, s->valor.inicializado, s->valor.tipo);
+                //printf("[DEBUG evaluarExpr] Símbolo '%s' encontrado, inicializado=%d, tipo=%d\n", s->nombre, s->valor.inicializado, s->valor.tipo);
                 if (!s->valor.inicializado) {
-                    printf("[EVALUADOR] Variable '%s' no inicializada\n", e->valor);
+                 //   printf("[EVALUADOR] Variable '%s' no inicializada\n", e->valor);
                     return r;
                 }
                 
@@ -514,12 +514,12 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                     
                     // **CAMBIAR TIPO DE STRING A TIPO BASE DE LA MATRIZ**
                     resultado.tipo = s->tipo;  // tipo base (int)
-                    
-                    printf("[DEBUG evaluarExpr] Matriz '%s' evaluada: tipo corregido de %d a %d\n", 
-                        s->nombre, TIPO_STRING, resultado.tipo);
-                    
+
+                    //printf("[DEBUG evaluarExpr] Matriz '%s' evaluada: tipo corregido de %d a %d\n", 
+                    //    s->nombre, TIPO_STRING, resultado.tipo);
+
                     if (resultado.v.s) {
-                        printf("[DEBUG evaluarExpr] Contenido matriz: '%s'\n", resultado.v.s);
+                     //   printf("[DEBUG evaluarExpr] Contenido matriz: '%s'\n", resultado.v.s);
                     }
                     
                     return resultado;
@@ -527,9 +527,9 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 
                 // **CASO NORMAL PARA OTROS TIPOS**
                 if (s->valor.tipo == TIPO_STRING && s->valor.v.s) {
-                    printf("[DEBUG evaluarExpr] Valor string: '%s'\n", s->valor.v.s);
+                 //   printf("[DEBUG evaluarExpr] Valor string: '%s'\n", s->valor.v.s);
                 }
-                printf("[EVALUADOR] Variable '%s' encontrada con valor: %d\n", e->valor, s->valor.v.i);
+                //printf("[EVALUADOR] Variable '%s' encontrada con valor: %d\n", e->valor, s->valor.v.i);
                 return getValorSimbolo(s);
             }
             
@@ -545,13 +545,13 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                     r.tipo = TIPO_CHAR;
                     r.v.c = (unsigned char)unicode_val; // Usar unsigned para caracteres extendidos
                     r.inicializado = 1;
-                    printf("[EVALUADOR] Literal Unicode '%s' convertido a char: %c (%d)\n", 
-                        e->valor, r.v.c, r.v.c);
+                    //printf("[EVALUADOR] Literal Unicode '%s' convertido a char: %c (%d)\n", 
+                     //   e->valor, r.v.c, r.v.c);
                     return r;
                 }
             }
             
-            printf("[EVALUADOR] Variable '%s' no declarada\n", e->valor);
+            //printf("[EVALUADOR] Variable '%s' no declarada\n", e->valor);
             return r;
         }
         case AST_OPERACION: 
@@ -560,7 +560,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 // Operación unaria
                 ValorSimbolo a = evaluarExpr(e->hijos[0]);
                 if (!a.inicializado) {
-                    printf("[EVALUADOR] Operando no inicializado para operación unaria '%s'\n", e->valor);
+                    //printf("[EVALUADOR] Operando no inicializado para operación unaria '%s'\n", e->valor);
                     return r;
                 }
                 
@@ -570,11 +570,11 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                         r.tipo = TIPO_BOOLEAN;
                         r.inicializado = 1;
                         r.v.b = !a.v.b;
-                        printf("[DEBUG OPERADOR] Negación unaria: !%s = %s\n", 
-                            a.v.b ? "true" : "false", r.v.b ? "true" : "false");
+                       // printf("[DEBUG OPERADOR] Negación unaria: !%s = %s\n", 
+                         //   a.v.b ? "true" : "false", r.v.b ? "true" : "false");
                         return r;
                     } else {
-                        printf("[EVALUADOR] Operador '!' solo válido para boolean, recibido tipo %d\n", a.tipo);
+                     //   printf("[EVALUADOR] Operador '!' solo válido para boolean, recibido tipo %d\n", a.tipo);
                         return r;
                     }
                 }
@@ -591,8 +591,8 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                             ValorSimbolo respaldo = buscarRespaldoGenerico(nombreVar, funcionActual);
                             
                             if (respaldo.inicializado) {
-                                printf("[DEBUG GENERIC] Usando valor respaldado para %s en %s\n", 
-                                    nombreVar, funcionActual);
+                                //printf("[DEBUG GENERIC] Usando valor respaldado para %s en %s\n", 
+                                 //   nombreVar, funcionActual);
                                 a = respaldo;
                             }
                         }
@@ -621,13 +621,13 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                         strcmp(e->hijos[0]->valor, "n") == 0 &&
                         strcmp(ambitoActual(), "fibonacci") == 0) {
                         
-                        printf("[DEBUG RECURSION] Operación especial n-x en función fibonacci\n");
+                        //printf("[DEBUG RECURSION] Operación especial n-x en función fibonacci\n");
                         
                         // Si el valor actual de n ha sido modificado, usar el original
                         ValorSimbolo original = buscarEstadoVariable("n");
                         if (original.inicializado) {
-                            printf("[DEBUG RECURSION] Usando valor original de n: %d en vez de %d\n", 
-                                original.v.i, a.v.i);
+                            //printf("[DEBUG RECURSION] Usando valor original de n: %d en vez de %d\n", 
+                             //   original.v.i, a.v.i);
                             a = original;
                         }
                     }
@@ -635,7 +635,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 
                 return evaluarOperaciones(e, a, b);
             }
-            printf("[EVALUADOR] Número de hijos inválido para operación: %d\n", e->num_hijos);
+            //printf("[EVALUADOR] Número de hijos inválido para operación: %d\n", e->num_hijos);
             return r;
         }
 
@@ -669,10 +669,10 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 }
             }
             
-            printf("[DEBUG EVALUADOR] Evaluando llamada a función como expresión\n");
+           // printf("[DEBUG EVALUADOR] Evaluando llamada a función como expresión\n");
             ValorSimbolo resultado = EvaluarLlamadaFuncion(e);
             if (resultado.inicializado) {
-                printf("[DEBUG EVALUADOR] Función retornó valor de tipo %s\n", nombreTipo(resultado.tipo));
+                //printf("[DEBUG EVALUADOR] Función retornó valor de tipo %s\n", nombreTipo(resultado.tipo));
                 return resultado;
             } else {
                 printf("[ERROR EVALUADOR] Función no retornó un valor inicializado\n");
@@ -682,7 +682,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
             }
         }
         case AST_ACCESO: {
-            printf("[DEBUG EVALUADOR] Evaluando acceso a vector/matriz en expresión\n");
+            //printf("[DEBUG EVALUADOR] Evaluando acceso a vector/matriz en expresión\n");
             
             // Obtener el identificador para determinar si es vector o matriz
             if (e->num_hijos < 1 || e->hijos[0]->tipo != AST_IDENTIFICADOR) {
@@ -708,7 +708,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 // Evaluar acceso a matriz
                 ValorSimbolo valorMatriz = evaluarAccesoMatriz(e);
                 if (valorMatriz.inicializado) {
-                    printf("[DEBUG EVALUADOR] Acceso a matriz evaluado exitosamente, valor = ");
+                    //printf("[DEBUG EVALUADOR] Acceso a matriz evaluado exitosamente, valor = ");
                     imprimirValor(valorMatriz);
                     return valorMatriz;
                 }
@@ -723,7 +723,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 // Evaluar acceso a vector
                 ValorSimbolo valorVector = evaluarAccesoVector(e);
                 if (valorVector.inicializado) {
-                    printf("[DEBUG EVALUADOR] Acceso a vector evaluado exitosamente, valor = ");
+                    //printf("[DEBUG EVALUADOR] Acceso a vector evaluado exitosamente, valor = ");
                     imprimirValor(valorVector);
                     return valorVector;
                 }
@@ -737,7 +737,7 @@ ValorSimbolo evaluarExpr(NodoAST* e) {
                 // Evaluar acceso a array
                 ValorSimbolo valorArray = evaluarAccesoArray(e);
                 if (valorArray.inicializado) {
-                    printf("[DEBUG EVALUADOR] Acceso a array evaluado exitosamente, valor = ");
+                   // printf("[DEBUG EVALUADOR] Acceso a array evaluado exitosamente, valor = ");
                     imprimirValor(valorArray);
                     return valorArray;
                 }

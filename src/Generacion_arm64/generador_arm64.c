@@ -14,6 +14,8 @@
 #include "Vectores_arm64/declaracionesVec_arm64.h"
 #include "Embebidas/String_valueOf.h"
 #include "InstruccionesSent_arm64/ForEach_arm64.h"
+#include "Vectores_arm64/EscrituraVector_arm64.h"
+#include "Embebidas/Parseos_arm64.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -121,6 +123,7 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     crearArchivoStringValueOffloat("String_valueOffloat.s");
     crearArchivoStringValueOfDouble("String_valueOfdouble.s");
     crearArchivoValueLong("String_valueOflong.s");
+    crearArchivosParseo();
 
     
     // Inicializar buffer
@@ -153,7 +156,9 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     const char* estructura_completa = 
         "// Código ARM64 generado por JavaLang Compiler\n"
         ".global _start\n"
-        ".extern itoa\n"
+        ".extern parse_int\n"      
+        ".extern parse_double\n"   
+        ".extern parse_float\n"    
         ".extern valuesOf_int\n"
         ".extern valueOf_bool\n"
         ".extern valueOf_float\n"
@@ -205,16 +210,66 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             printf("[DEBUG] Nodo de declaración detectado\n");
             
             if (nodo->num_hijos >= 2) {
-                NodoAST* tipoNodo = nodo->hijos[0];
-                NodoAST* idNodo = nodo->hijos[1];
-                NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL;
-                
-                const char* nombreVariable = idNodo->valor;
-                const char* tipoVariable = tipoNodo->valor;
-                TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
-                
-                // **SI TIENE OPERACIÓN, GENERAR DECLARACIÓN Y AGREGAR A PENDIENTES**
-                if (valorNodo && valorNodo->tipo == AST_OPERACION) {
+            NodoAST* tipoNodo = nodo->hijos[0];
+            NodoAST* idNodo = nodo->hijos[1];
+            NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL;
+
+            const char* nombreVariable = idNodo->valor;
+            const char* tipoVariable = tipoNodo->valor;
+            TipoDato tipo = obtenerTipoDesdeString(tipoVariable);
+
+            // Detectar parseos
+            if (valorNodo) {
+                if (valorNodo->tipo == AST_PARSEINT) {
+                    // 1. Declarar la variable en .data
+                    char decl[64];
+                    if (tipo == TIPO_INT) {
+                        snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable);
+                    } else {
+                        snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable); // Por defecto int
+                    }
+                    insertarEnSeccionData(&gen->gen_declaraciones, decl);
+
+                    // 2. Generar el código de parseo y asignación
+                    int regIndex = 1;
+                    ResultadoExprEmbebida resultado = generarParseIntARM64(&gen->gen_declaraciones, valorNodo, &regIndex);
+                    insertarEnSeccionText(&gen->gen_declaraciones, resultado.codigo);
+                    char codigo[128];
+                    snprintf(codigo, sizeof(codigo),
+                        "    ldr x1, =%s\n"
+                        "    str w0, [x1]\n", nombreVariable);
+                    insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+                    return;
+                }
+                else if (valorNodo->tipo == AST_PARSEDOUBLE) {
+                    char decl[64];
+                    snprintf(decl, sizeof(decl), "%s: .double 0.0\n", nombreVariable);
+                    insertarEnSeccionData(&gen->gen_declaraciones, decl);
+                    int regIndex = 1;
+                    ResultadoExprEmbebida resultado = generarParseDoubleARM64(&gen->gen_declaraciones, valorNodo, &regIndex);
+                    insertarEnSeccionText(&gen->gen_declaraciones, resultado.codigo);
+                    char codigo[128];
+                    snprintf(codigo, sizeof(codigo),
+                        "    ldr x1, =%s\n"
+                        "    str d0, [x1]\n", nombreVariable);
+                    insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+                    return;
+                }
+                else if (valorNodo->tipo == AST_PARSEFLOAT) {
+                     char decl[64];
+                    snprintf(decl, sizeof(decl), "%s: .float 0.0\n", nombreVariable);
+                    insertarEnSeccionData(&gen->gen_declaraciones, decl);
+                    int regIndex = 1;
+                    ResultadoExprEmbebida resultado = generarParseFloatARM64(&gen->gen_declaraciones, valorNodo, &regIndex);
+                    insertarEnSeccionText(&gen->gen_declaraciones, resultado.codigo);
+                    char codigo[128];
+                    snprintf(codigo, sizeof(codigo),
+                        "    ldr x1, =%s\n"
+                        "    str s0, [x1]\n", nombreVariable);
+                    insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+                    return;
+                }
+                else if (valorNodo->tipo == AST_OPERACION){
                     printf("[DEBUG] Agregando operación pendiente para: %s\n", nombreVariable);
                     
                     // **GENERAR LA DECLARACIÓN CON .skip 8 INMEDIATAMENTE**
@@ -230,12 +285,14 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                     agregarOperacionPendiente(nombreVariable, valorNodo, tipo, true);
 
                     procesarOperacionesPendientes(gen);
-                } else {
-                    // Declaración simple, generar inmediatamente
+                }else {
                     generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
                 }
+            } else {
+                printf("no hay valor en el nodo");
             }
-            break;
+        }
+        break;
             
         case AST_DECLARACION_CONST:
             generarDeclaracionConstante(&gen->gen_constantes, nodo, &gen->seccion_rodata_creada);
@@ -331,6 +388,11 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             printf("[DEBUG] Nodo de declaración de vector detectado\n");
             generarDeclaracionVectorARM64(&gen->gen_declaraciones, nodo);
             break;
+        case AST_ACCESO_ESCRITURA:
+            printf("[DEBUG] Nodo de acceso con escritura detectado\n");
+            generarEscrituraVectorARM64(&gen->gen_declaraciones, nodo);
+            break;
+
         default:
             // Procesar hijos recursivamente
             for (int i = 0; i < nodo->num_hijos; i++) {

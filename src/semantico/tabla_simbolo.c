@@ -103,8 +103,8 @@ Simbolo* buscarSimboloConAmbito(const char* nombre) {
     const char* ambitoActivo = ambitoActual();
     Simbolo* simboloLocal = buscarSimboloEnAmbito(nombre, ambitoActivo);
     if (simboloLocal) {
-        printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito actual '%s' con valor %d\n", 
-               nombre, ambitoActivo, simboloLocal->valor.v.i);
+        //printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito actual '%s' con valor %d\n", 
+         //      nombre, ambitoActivo, simboloLocal->valor.v.i);
         return simboloLocal;
     }
     
@@ -112,13 +112,13 @@ Simbolo* buscarSimboloConAmbito(const char* nombre) {
     for (int i = topeAmbitos - 2; i >= 0; i--) {
         Simbolo* simboloSuperior = buscarSimboloEnAmbito(nombre, pilaAmbitos[i]);
         if (simboloSuperior) {
-            printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito superior '%s'\n", 
-                   nombre, pilaAmbitos[i]);
+            //printf("[DEBUG buscarSimboloConAmbito] Encontrado '%s' en ámbito superior '%s'\n", 
+            //       nombre, pilaAmbitos[i]);
             return simboloSuperior;
         }
     }
     
-    printf("[DEBUG buscarSimboloConAmbito] Símbolo '%s' no encontrado\n", nombre);
+    //printf("[DEBUG buscarSimboloConAmbito] Símbolo '%s' no encontrado\n", nombre);
     return NULL;
 }
 
@@ -219,8 +219,8 @@ static Simbolo* crearSimbolo(const char* nombre, TipoSimbolo clase, TipoDato tip
         default: break;
     }
     
-    printf("[DEBUG crearSimbolo] Creado símbolo '%s': id=%d, es_constante=%d, tipo=%d\n", 
-           nombre, nuevo->id, nuevo->es_constante, tipo);
+    //printf("[DEBUG crearSimbolo] Creado símbolo '%s': id=%d, es_constante=%d, tipo=%d\n", 
+    //       nombre, nuevo->id, nuevo->es_constante, tipo);
     
     return nuevo;
 }
@@ -288,8 +288,8 @@ void agregarSimboloDetallado(const char* nombre, TipoSimbolo clase, TipoDato tip
         actual->siguiente = nuevo;
     }
     
-    printf("[DEBUG agregarSimboloDetallado] Símbolo '%s' agregado a tabla con es_constante=%d\n", 
-           nombre, nuevo->es_constante);
+    //printf("[DEBUG agregarSimboloDetallado] Símbolo '%s' agregado a tabla con es_constante=%d\n", 
+    //       nombre, nuevo->es_constante);
 }
 
 void depurarTodosSimbolos(const char* momento) {
@@ -308,26 +308,26 @@ void depurarTodosSimbolos(const char* momento) {
 }
 
 Simbolo* buscarSimboloConDepuracion(const char* nombre) {
-    printf("[DEBUG buscarSimboloConDepuracion] Buscando símbolo '%s'\n", nombre);
+    //printf("[DEBUG buscarSimboloConDepuracion] Buscando símbolo '%s'\n", nombre);
     
     Simbolo* resultado = buscarSimboloConAmbito(nombre);
     
     if (resultado) {
-        printf("[DEBUG buscarSimboloConDepuracion] Encontrado '%s': es_constante=%d, memoria=0x%p\n", 
-               nombre, resultado->es_constante, (void*)resultado);
+        //printf("[DEBUG buscarSimboloConDepuracion] Encontrado '%s': es_constante=%d, memoria=0x%p\n", 
+        //       nombre, resultado->es_constante, (void*)resultado);
         
         // Verificación adicional para 'mensaje'
         if (strcmp(nombre, "mensaje") == 0) {
-            printf("[DEBUG MENSAJE ESPECIAL] es_constante=%d, clase=%d, tipo=%d\n",
-                   resultado->es_constante, resultado->clase, resultado->tipo);
+            //printf("[DEBUG MENSAJE ESPECIAL] es_constante=%d, clase=%d, tipo=%d\n",
+            //       resultado->es_constante, resultado->clase, resultado->tipo);
                    
             // Verificar si hay corrupción de memoria
             if (resultado->es_constante != 0 && resultado->es_constante != 1) {
-                printf("[DEBUG MENSAJE ESPECIAL] ¡¡¡MEMORIA CORRUPTA!!! es_constante=%d (no es 0 ni 1)\n",
-                       resultado->es_constante);
+                //printf("[DEBUG MENSAJE ESPECIAL] ¡¡¡MEMORIA CORRUPTA!!! es_constante=%d (no es 0 ni 1)\n",
+                //       resultado->es_constante);
                 // Forzar a 0 para corregir
                 resultado->es_constante = 0;
-                printf("[DEBUG MENSAJE ESPECIAL] Corregido a es_constante=0\n");
+                //printf("[DEBUG MENSAJE ESPECIAL] Corregido a es_constante=0\n");
             }
         }
     } else {

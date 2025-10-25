@@ -371,7 +371,7 @@ declaracion_vector:
 lista_elementos:
     lista_elementos TOKEN_COMA expresion {
         if ($1->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Elementos");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Interna");
             agregarHijo(lista, $1);
             agregarHijo(lista, $3);
             $$ = lista;
@@ -381,7 +381,7 @@ lista_elementos:
         }
     }
     | expresion {
-        $$ = crearNodo(AST_INTERNO, "Lista Elementos");
+        $$ = crearNodo(AST_INTERNO, "Lista Interna");
         agregarHijo($$, $1);
     }
 ;
@@ -518,7 +518,7 @@ declaracion_array_multidimensional:
 lista_bloques:
     lista_bloques TOKEN_COMA lista_elementos_o_bloques {
         if ($1->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Bloques");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Lista Bloques (INTERNO)");
             agregarHijo(lista, $1);
             agregarHijo(lista, $3);
             $$ = lista;
@@ -528,7 +528,7 @@ lista_bloques:
         }
     }
     | lista_elementos_o_bloques {
-        $$ = crearNodo(AST_INTERNO, "Lista Bloques");
+        $$ = crearNodo(AST_INTERNO, "Lista Bloques (INTERNO)");
         agregarHijo($$, $1);
     }
 ;
@@ -536,13 +536,13 @@ lista_bloques:
 lista_elementos_o_bloques:
     TOKEN_LLAVEIZQ lista_elementos TOKEN_LLAVEDER {
         // Caso: lista de elementos
-        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque");
+        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque (INTERNO)");
         agregarHijo(bloque, $2);
         $$ = bloque;
     }
     | TOKEN_LLAVEIZQ lista_bloques TOKEN_LLAVEDER {
         // Caso: bloques anidados
-        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque");
+        NodoAST* bloque = crearNodo(AST_INTERNO, "Bloque (INTERNO)");
         agregarHijo(bloque, $2);
         $$ = bloque;
     }
@@ -554,13 +554,13 @@ DimensionesCorchetes:
         if ($3 == NULL) {
             $$ = dim;
         } else if ($3->tipo != AST_INTERNO) {
-            NodoAST* lista = crearNodo(AST_INTERNO, "Dimensiones");
+            NodoAST* lista = crearNodo(AST_INTERNO, "Dimensiones (INTERNO)");
             agregarHijo(lista, dim);
             agregarHijo(lista, $3);
             $$ = lista;
         } else {
             /* Insertar al principio de la lista */
-            NodoAST* nueva = crearNodo(AST_INTERNO, "Dimensiones");
+            NodoAST* nueva = crearNodo(AST_INTERNO, "Dimensiones (INTERNO)");
             agregarHijo(nueva, dim);
             for (int i = 0; i < $3->num_hijos; i++) {
                 agregarHijo(nueva, $3->hijos[i]);

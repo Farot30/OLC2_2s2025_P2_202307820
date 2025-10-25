@@ -30,7 +30,7 @@ static char* concat3(const char* s1, const char* s2, const char* s3) {
 
 // Función para evaluar AST_PARSEJOIN
 ValorSimbolo evaluarParseJoin(NodoAST* e) {
-    printf("[DEBUG evaluarParseJoin] === INICIO ===\n");
+    //printf("[DEBUG evaluarParseJoin] === INICIO ===\n");
     ValorSimbolo r;
     memset(&r, 0, sizeof(r));
     r.tipo = TIPO_STRING;
@@ -116,7 +116,7 @@ ValorSimbolo evaluarParseJoin(NodoAST* e) {
                     } else {
                         char* temp = resultado_final;
                         resultado_final = concat3(temp, delimitador.v.s, token);
-                        printf("[DEBUG evaluarParseJoin] Resultado parcial: '%s'\n", resultado_final);
+                        //printf("[DEBUG evaluarParseJoin] Resultado parcial: '%s'\n", resultado_final);
                         free(temp);
                     }
                     
@@ -200,7 +200,7 @@ ValorSimbolo evaluarParseJoin(NodoAST* e) {
             free(elemStr);
         }
 
-        printf("[DEBUG evaluarParseJoin] Resultado lista normal: '%s'\n", r.v.s ? r.v.s : "(null)");
+        //printf("[DEBUG evaluarParseJoin] Resultado lista normal: '%s'\n", r.v.s ? r.v.s : "(null)");
         return r;
     }
     
