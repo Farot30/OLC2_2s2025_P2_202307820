@@ -1,0 +1,53 @@
+public static void main(){
+System.out.println("=== SISTEMA DE ANALISIS DE DATOS ACADEMICOS ===");
+    
+    // Declaración dos dimensiones
+    System.out.println("\n--- DECLARACION DE MATRICES 2D ---");
+    
+    // Declaración con inicialización directa
+    int[][] calificacionesPorMateria = {
+        {85, 92, 78, 90},  // Estudiante 1: Mat, Fis, Qui, Bio
+        {90, 88, 85, 93},  // Estudiante 2
+        {78, 82, 90, 87},  // Estudiante 3
+        {95, 91, 88, 94}   // Estudiante 4
+    };
+   
+    
+    // Matriz para operaciones matemáticas
+    int[][] matrizA = {
+        {3, 2, 1},
+        {1, 4, 2},
+        {2, 1, 3}
+    };
+    
+    int[][] matrizB = {
+        {2, 1, 3},
+        {3, 2, 1},
+        {1, 3, 2}
+    };
+
+
+System.out.println("Matrices 2D declaradas exitosamente:");
+    System.out.println("- calificacionesPorMateria: " + calificacionesPorMateria.length + 
+                      " x " + calificacionesPorMateria[0].length);
+    System.out.println("- matrizA: " + matrizA.length + 
+                      " x " + matrizA[0].length);
+    System.out.println("- matrizB: " + matrizB.length + 
+                      " x " + matrizB[0].length);
+
+
+System.out.println("\n--- MODIFICACION DE ELEMENTOS 2D ---");
+    
+    System.out.println("Calificación original del Estudiante 1 en Física: " + 
+                      calificacionesPorMateria[0][1]);
+    
+    // Modificar calificaciones específicas
+    calificacionesPorMateria[0][1] = 95; // Estudiante 1, Física
+    calificacionesPorMateria[2][0] = 82; // Estudiante 3, Matemáticas
+    calificacionesPorMateria[3][2] = 90; // Estudiante 4, Química
+
+
+System.out.println("Nueva calificación del Estudiante 1 en Física: " + 
+                      calificacionesPorMateria[0][1]);
+
+}

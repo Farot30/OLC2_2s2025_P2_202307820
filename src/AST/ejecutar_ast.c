@@ -436,6 +436,7 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return EJEC_OK;
             
         case AST_DECLARACION_MATRIZ:
+            GeneradorCodigoARM64(nodo);
             printf("[DEBUG] Procesando declaración de matriz\n");
             verificarDeclaracionMatriz(nodo);
             return EJEC_OK;
@@ -546,19 +547,30 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
 
         case AST_FUNCION_VOID:{
             printf("[DEBUG] Procesando función void\n");
-            return DeclararFuncionVoid(nodo);
+            //return DeclararFuncionVoid(nodo);
+            
+            GeneradorCodigoARM64(nodo);
+            return EJEC_OK;
         }
 
         case AST_LLAMADA_VOID:{
             printf("[DEBUG] Procesando llamada a función void\n");
-            return EjecutarLlamadaVoid(nodo);
+            //return EjecutarLlamadaVoid(nodo);
+        
+            GeneradorCodigoARM64(nodo);
+            return EJEC_OK;
         }
         case AST_FUNCION:{
+            GeneradorCodigoARM64(nodo);
+            /*
             printf("[DEBUG] Procesando función\n");
             contexto_funcion++;
             ResultadoEjecucion res = DeclararFuncion(nodo);
             contexto_funcion--;
             return res;
+            */
+           return EJEC_OK;
+        
         }
 
         case AST_DO_WHILE:
@@ -573,6 +585,8 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             */
            return EJEC_OK;
         case AST_LLAMADA: {
+            GeneradorCodigoARM64(nodo);
+            /*
             // Verificar si es una función void o con retorno
             if (nodo->num_hijos >= 1 && nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
                 Simbolo* funcionSimbolo = buscarSimbolo(nodo->hijos[0]->valor);
@@ -593,6 +607,8 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             // Fallback: intentar como función normal
             printf("[DEBUG ejecutar_ast] Ejecutando llamada genérica\n");
             return EjecutarLlamadas(nodo);
+            */
+            return EJEC_OK;
         }
         case AST_ASIGNACION_COMPUESTA: {
             if (nodo->num_hijos < 2) {
@@ -633,8 +649,10 @@ ResultadoEjecucion ejecutarNodoAST(NodoAST* nodo) {
             return EJEC_OK;
         }
         case AST_RETURN:
-            printf("[DEBUG] Procesando return\n");
-            return ejecutarSentenciaReturn(nodo);
+            GeneradorCodigoARM64(nodo);
+            //printf("[DEBUG] Procesando return\n");
+            //return ejecutarSentenciaReturn(nodo);
+            return EJEC_OK;
 
         case AST_PROGRAMA: // Agregar caso específico para nodo Programa
             printf("[DEBUG] Procesando nodo Programa\n");

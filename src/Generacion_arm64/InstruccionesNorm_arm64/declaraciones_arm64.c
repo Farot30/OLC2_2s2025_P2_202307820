@@ -6,6 +6,7 @@
 #include "../../semantico/tipos.h"
 #include "../../semantico/semantico.h"
 #include "../../AST/ast.h"
+#include "../../AST/err.h"
 #include "../Vectores_arm64/AccesoVector_arm64.h"
 #include "../Embebidas/Embebidas_arm64.h"
 #include <string.h>
@@ -20,36 +21,106 @@ void inicializarGeneradorDeclaraciones(GeneradorDeclaraciones* gen, FILE* archiv
     gen->temp_str_valueof_bss_insertado = false;
     gen->contador_literales_string = 0;
 
+    gen->dentro_de_funcion = false;
+    gen->nombre_funcion_actual[0] = '\0';
+    gen->buffer_funcion_len = 0;
+    gen->buffer_funcion[0] = '\0';
+
     if (gen->buffer) {
         gen->buffer[0] = '\0';
     }
 }
 extern NodoAST* astGlobal; // Declaración externa del nodo raíz del AST
 
+static void generarNarrowingCasting(GeneradorDeclaraciones* gen, NodoAST* valorNodo, const char* nombreVariable, TipoDato tipoDestino) {
+    char codigo[512] = "";
+    char buffer[256];
+    
+    TipoDato tipoOrigen = deducirTipoExprARM64(valorNodo, astGlobal);
+    
+    if (tipoOrigen == TIPO_DOUBLE && tipoDestino == TIPO_FLOAT) {
+        // double -> float
+        snprintf(buffer, sizeof(buffer),
+            "    // Narrowing: double -> float\n"
+            "    ldr x1, =%s\n"
+            "    ldr d0, [x1]\n"
+            "    fcvt s0, d0\n"
+            "    ldr x1, =%s\n"
+            "    str s0, [x1]\n",
+            valorNodo->valor, nombreVariable);
+    } 
+    else if (tipoOrigen == TIPO_FLOAT && tipoDestino == TIPO_INT) {
+        // float -> int
+        snprintf(buffer, sizeof(buffer),
+            "    // Narrowing: float -> int\n"
+            "    ldr x1, =%s\n"
+            "    ldr s0, [x1]\n"
+            "    fcvtzs w0, s0\n"
+            "    ldr x1, =%s\n"
+            "    str w0, [x1]\n",
+            valorNodo->valor, nombreVariable);
+    }
+    else if (tipoOrigen == TIPO_DOUBLE && tipoDestino == TIPO_INT) {
+        // double -> int
+        snprintf(buffer, sizeof(buffer),
+            "    // Narrowing: double -> int\n"
+            "    ldr x1, =%s\n"
+            "    ldr d0, [x1]\n"
+            "    fcvtzs w0, d0\n"
+            "    ldr x1, =%s\n"
+            "    str w0, [x1]\n",
+            valorNodo->valor, nombreVariable);
+    }
+    else if (tipoOrigen == TIPO_INT && tipoDestino == TIPO_CHAR) {
+        // int -> char
+        snprintf(buffer, sizeof(buffer),
+            "    // Narrowing: int -> char\n"
+            "    ldr x1, =%s\n"
+            "    ldr w0, [x1]\n"
+            "    ldr x1, =%s\n"
+            "    strb w0, [x1]\n",
+            valorNodo->valor, nombreVariable);
+    }
+    
+    strcat(codigo, buffer);
+    insertarEnSeccionText(gen, codigo);
+}
+
 void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
     if (!gen->buffer || !codigo) return;
 
-    // **BUSCAR LA SALIDA DEL PROGRAMA PARA INSERTAR ANTES**
+    if (gen->buffer_funcion_len + strlen(codigo) >= sizeof(gen->buffer_funcion)) {
+        printf("[ERROR] Desbordamiento de buffer de función\n");
+        return;
+    }
+
+    // SI ESTAMOS DENTRO DE UNA FUNCIÓN
+    if (gen->dentro_de_funcion && gen->nombre_funcion_actual[0] != '\0') {
+        size_t len_codigo = strlen(codigo);
+        if (gen->buffer_funcion_len + len_codigo + 1 < sizeof(gen->buffer_funcion)) {
+            memcpy(gen->buffer_funcion + gen->buffer_funcion_len, codigo, len_codigo);
+            gen->buffer_funcion_len += len_codigo;
+            gen->buffer_funcion[gen->buffer_funcion_len] = '\0';
+        }
+        return;
+    }
+
+    // SI NO ESTAMOS EN UNA FUNCIÓN, INSERTAR ANTES DE LA SALIDA DE _start
     const char* exit_marker = "    // Salida del programa por defecto\n";
     char* pos = strstr(gen->buffer, exit_marker);
     
     if (pos) {
-        // **INSERTAR JUSTO ANTES DE LA SALIDA DEL PROGRAMA**
         size_t offset = pos - gen->buffer;
         size_t len_actual = strlen(gen->buffer);
         size_t len_codigo = strlen(codigo);
 
-        // Redimensionar buffer si es necesario
         if (len_actual + len_codigo + 1 >= gen->buffer_size) {
             gen->buffer_size = len_actual + len_codigo + 1024;
             gen->buffer = realloc(gen->buffer, gen->buffer_size);
-            // Recalcular posición después del realloc
             pos = gen->buffer + offset;
         }
 
-        // **✅ AGREGAR SALTO DE LÍNEA SI ES NECESARIO**
         if (offset > 0 && *(pos - 1) != '\n') {
-            // Insertar salto de línea antes del código
             char codigoConSalto[len_codigo + 2];
             snprintf(codigoConSalto, sizeof(codigoConSalto), "\n%s", codigo);
             size_t lenNueva = strlen(codigoConSalto);
@@ -63,12 +134,10 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
             memmove(pos + lenNueva, pos, len_actual - offset + 1);
             memcpy(pos, codigoConSalto, lenNueva);
         } else {
-            // Mover el contenido para hacer espacio
             memmove(pos + len_codigo, pos, len_actual - offset + 1);
             memcpy(pos, codigo, len_codigo);
         }
     } else {
-        // Si no encuentra el marcador de salida, agregar al final
         agregarCodigoAlBuffer(gen, codigo);
     }
 }
@@ -76,26 +145,38 @@ void insertarEnSeccionText(GeneradorDeclaraciones* gen, const char* codigo) {
 void insertarEnSeccionData(GeneradorDeclaraciones* gen, const char* codigo) {
     if (!gen->buffer || !codigo) return;
 
+    // Solo agrega salto de línea al final si no existe
+    char codigoFinal[1024];
+    size_t len = strlen(codigo);
+    if (len == 0) return;
+
+    if (codigo[len-1] != '\n') {
+        snprintf(codigoFinal, sizeof(codigoFinal), "%s\n", codigo);
+        codigo = codigoFinal;
+    }
+
     const char* data_marker = ".data\n";
     char* pos = strstr(gen->buffer, data_marker);
     if (pos) {
-        // Encontrar el final de la línea .data
         pos += strlen(data_marker);
-        size_t offset = pos - gen->buffer;
+        // Busca el final de la sección .data
+        char* end_data = pos;
+        while (*end_data && strncmp(end_data, "\n//", 3) != 0 && strncmp(end_data, "\n.", 2) != 0) {
+            end_data = strchr(end_data + 1, '\n');
+            if (!end_data) break;
+        }
+        size_t offset = end_data ? (end_data - gen->buffer) : strlen(gen->buffer);
         size_t len_actual = strlen(gen->buffer);
         size_t len_codigo = strlen(codigo);
 
-        // Redimensionar buffer si es necesario
         if (len_actual + len_codigo + 1 >= gen->buffer_size) {
             gen->buffer_size = len_actual + len_codigo + 1024;
             gen->buffer = realloc(gen->buffer, gen->buffer_size);
         }
 
-        // Mover el contenido después de .data para hacer espacio
         memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
         memcpy(gen->buffer + offset, codigo, len_codigo);
     } else {
-        // Si no existe .data, agregar al final
         agregarCodigoAlBuffer(gen, codigo);
     }
 }
@@ -219,12 +300,207 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
     else if (tipo == TIPO_FLOAT) tipoDeclaracion = "float";
     else if (tipo == TIPO_CHAR) tipoDeclaracion = "byte";
     else if (tipo == TIPO_BOOLEAN) tipoDeclaracion = "byte";
-    else if (tipo == TIPO_STRING) tipoDeclaracion = "skip 8";
 
+    // ✅ **CASO ESPECIAL: String con valueOf - DETENER AQUÍ**
+    if (tipo == TIPO_STRING && valorNodo && valorNodo->tipo == AST_VALUEOF) {
+        // Crear buffer dedicado para esta variable
+        snprintf(codigo, sizeof(codigo),
+            "%s_buffer: .skip 32\n"
+            "%s: .quad %s_buffer\n",
+            nombreVariable, nombreVariable, nombreVariable);
+        insertarEnSeccionData(gen, codigo);
+
+        // Generar código de conversión
+        int regIndex = 1;
+        ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &regIndex);
+        insertarEnSeccionText(gen, resultado.codigo);
+
+        // Asignar resultado a la variable
+        snprintf(codigo, sizeof(codigo),
+            "    ldr x1, =%s\n"
+            "    str %s, [x1]\n", 
+            nombreVariable, 
+            resultado.resultado[0] == 'x' ? resultado.resultado : "x0");
+        insertarEnSeccionText(gen, codigo);
+        
+        return; // ✅ SALIR AQUÍ - NO CONTINUAR
+    }
+
+    if (valorNodo && valorNodo->tipo == AST_CAST) {
+        printf("[DEBUG CAST] Declaración con cast para '%s'\n", nombreVariable);
+        
+        if (valorNodo->num_hijos < 1) {
+            printf("[ERROR] Nodo AST_CAST sin hijo\n");
+            return;
+        }
+        
+        // El tipo destino está en valorNodo->valor (ej: "float", "int")
+        // La expresión a castear está en valorNodo->hijos[0]
+        TipoDato tipoCast = obtenerTipoDesdeString(valorNodo->valor);
+        NodoAST* exprACastear = valorNodo->hijos[0];
+        
+        if (!exprACastear) {
+            printf("[ERROR] Cast sin expresión\n");
+            return;
+        }
+        
+        // Verificar que el tipo del cast coincida con el tipo de la variable
+        if (tipoCast != tipo) {
+            printf("[WARNING] Tipo de cast (%d) no coincide con tipo de variable (%d)\n", tipoCast, tipo);
+        }
+        
+        // 1. Declarar la variable en .data
+        if (tipo == TIPO_FLOAT) {
+            snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
+        } else if (tipo == TIPO_DOUBLE) {
+            snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
+        } else if (tipo == TIPO_INT) {
+            snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
+        } else if (tipo == TIPO_CHAR) {
+            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
+        } else if (tipo == TIPO_BOOLEAN) {
+            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
+        }
+        insertarEnSeccionData(gen, codigo);
+        
+        // 2. Si el hijo es un identificador (variable), usar narrowing/widening directo
+        if (exprACastear->tipo == AST_IDENTIFICADOR) {
+            TipoDato tipoOrigen = deducirTipoExprARM64(exprACastear, astGlobal);
+            
+            printf("[DEBUG CAST] Cast de variable '%s': tipo origen=%d, tipo destino=%d\n", 
+                exprACastear->valor, tipoOrigen, tipo);
+            
+            if (esNarrowing(tipoOrigen, tipo)) {
+                // Usar la función de narrowing
+                generarNarrowingCasting(gen, exprACastear, nombreVariable, tipo);
+            } else if (esWidening(tipoOrigen, tipo)) {
+                // Generar código de widening
+                char codigoCarga[512] = "";
+                
+                if (tipoOrigen == TIPO_CHAR && tipo == TIPO_INT) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: char -> int\n"
+                        "    ldr x1, =%s\n"
+                        "    ldrb w0, [x1]\n"
+                        "    ldr x1, =%s\n"
+                        "    str w0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == TIPO_INT && tipo == TIPO_FLOAT) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: int -> float\n"
+                        "    ldr x1, =%s\n"
+                        "    ldr w0, [x1]\n"
+                        "    scvtf s0, w0\n"
+                        "    ldr x1, =%s\n"
+                        "    str s0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == TIPO_FLOAT && tipo == TIPO_DOUBLE) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: float -> double\n"
+                        "    ldr x1, =%s\n"
+                        "    ldr s0, [x1]\n"
+                        "    fcvt d0, s0\n"
+                        "    ldr x1, =%s\n"
+                        "    str d0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == TIPO_INT && tipo == TIPO_DOUBLE) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: int -> double\n"
+                        "    ldr x1, =%s\n"
+                        "    ldr w0, [x1]\n"
+                        "    scvtf d0, w0\n"
+                        "    ldr x1, =%s\n"
+                        "    str d0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == TIPO_CHAR && tipo == TIPO_FLOAT) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: char -> float\n"
+                        "    ldr x1, =%s\n"
+                        "    ldrb w0, [x1]\n"
+                        "    scvtf s0, w0\n"
+                        "    ldr x1, =%s\n"
+                        "    str s0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == TIPO_CHAR && tipo == TIPO_DOUBLE) {
+                    snprintf(codigoCarga, sizeof(codigoCarga),
+                        "    // Widening cast: char -> double\n"
+                        "    ldr x1, =%s\n"
+                        "    ldrb w0, [x1]\n"
+                        "    scvtf d0, w0\n"
+                        "    ldr x1, =%s\n"
+                        "    str d0, [x1]\n",
+                        exprACastear->valor, nombreVariable);
+                } else if (tipoOrigen == tipo) {
+                    // Mismo tipo, solo copiar
+                    if (tipo == TIPO_FLOAT) {
+                        snprintf(codigoCarga, sizeof(codigoCarga),
+                            "    ldr x1, =%s\n"
+                            "    ldr s0, [x1]\n"
+                            "    ldr x1, =%s\n"
+                            "    str s0, [x1]\n",
+                            exprACastear->valor, nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(codigoCarga, sizeof(codigoCarga),
+                            "    ldr x1, =%s\n"
+                            "    ldr d0, [x1]\n"
+                            "    ldr x1, =%s\n"
+                            "    str d0, [x1]\n",
+                            exprACastear->valor, nombreVariable);
+                    } else if (tipo == TIPO_INT) {
+                        snprintf(codigoCarga, sizeof(codigoCarga),
+                            "    ldr x1, =%s\n"
+                            "    ldr w0, [x1]\n"
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n",
+                            exprACastear->valor, nombreVariable);
+                    } else if (tipo == TIPO_CHAR) {
+                        snprintf(codigoCarga, sizeof(codigoCarga),
+                            "    ldr x1, =%s\n"
+                            "    ldrb w0, [x1]\n"
+                            "    ldr x1, =%s\n"
+                            "    strb w0, [x1]\n",
+                            exprACastear->valor, nombreVariable);
+                    }
+                }
+                
+                insertarEnSeccionText(gen, codigoCarga);
+            } else {
+                // Tipos iguales, copiar directamente (ya manejado arriba)
+                printf("[DEBUG CAST] Cast redundante: tipos iguales\n");
+            }
+        } 
+        // 3. Si el hijo es una expresión compleja, evaluarla recursivamente
+        else {
+            int regIndex = 1;
+            ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, exprACastear, &regIndex);
+            
+            insertarEnSeccionText(gen, resultado.codigo);
+            
+            // Asignar resultado con conversión de tipo si es necesario
+            if (tipo == TIPO_FLOAT) {
+                snprintf(codigo, sizeof(codigo),
+                    "    ldr x1, =%s\n"
+                    "    str s0, [x1]\n", nombreVariable);
+            } else if (tipo == TIPO_DOUBLE) {
+                snprintf(codigo, sizeof(codigo),
+                    "    ldr x1, =%s\n"
+                    "    str d0, [x1]\n", nombreVariable);
+            } else if (tipo == TIPO_INT || tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
+                snprintf(codigo, sizeof(codigo),
+                    "    ldr x1, =%s\n"
+                    "    str %s, [x1]\n", nombreVariable, resultado.resultado);
+            }
+            insertarEnSeccionText(gen, codigo);
+        }
+        
+        return; // ✅ SALIR AQUÍ - CAST MANEJADO
+    }
+
+    // ✅ **CASO: Identificador (asignación desde otra variable)**
     if (valorNodo && valorNodo->tipo == AST_IDENTIFICADOR) {
         TipoDato tipoOrigen = deducirTipoExprARM64(valorNodo, astGlobal);
         
-        // **Generar declaración sin valor inicial**
+        // Generar declaración sin valor inicial
         if (tipo == TIPO_STRING) {
             snprintf(codigo, sizeof(codigo),
                 "%s: .quad str_lit_%s\n"
@@ -240,12 +516,17 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
             snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
         }
         insertarEnSeccionData(gen, codigo);
+
+        if (esNarrowing(tipoOrigen, tipo)) {
+            generarNarrowingCasting(gen, valorNodo, nombreVariable, tipo);
+            return;
+        }
         
-        // **Generar código ARM64 para cargar y convertir el valor**
+        // Generar código ARM64 para cargar y convertir el valor
         char codigoCarga[512] = "";
         
         if (esWidening(tipoOrigen, tipo)) {
-            // **Widening Casting: char -> int -> float -> double**
+            // Widening Casting: char -> int -> float -> double
             if (tipoOrigen == TIPO_CHAR && tipo == TIPO_INT) {
                 snprintf(codigoCarga, sizeof(codigoCarga),
                     "    // Widening: char -> int\n"
@@ -300,8 +581,8 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
                     "    str d0, [x1]\n",
                     valorNodo->valor, nombreVariable);
             }
-        }else if (tipoOrigen == tipo) {
-            // **Mismo tipo: solo copiar**
+        } else if (tipoOrigen == tipo) {
+            // Mismo tipo: solo copiar
             if (tipo == TIPO_CHAR) {
                 snprintf(codigoCarga, sizeof(codigoCarga),
                     "    ldr x1, =%s\n"
@@ -337,17 +618,23 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         return;
     }
 
-    // --- INTEGRACIÓN DE EVALUADOR RECURSIVO ---
-    if (valorNodo && (valorNodo->tipo == AST_OPERACION || valorNodo->tipo == AST_VALUEOF)) {
+    // ✅ **CASO: Operaciones o otras expresiones complejas**
+    if (valorNodo && (valorNodo->tipo == AST_OPERACION)) {
+        printf("[DEBUG] Declaración con expresión compleja para '%s'\n", nombreVariable);
         // 1. Declaración en .data
-        if (tipo == TIPO_DOUBLE) {
+        if (tipo == TIPO_STRING) {
+            snprintf(codigo, sizeof(codigo),
+                "%s: .quad str_lit_%s\n"
+                "str_lit_%s: .asciz \"\"\n",
+                nombreVariable, nombreVariable, nombreVariable);
+        } else if (tipo == TIPO_DOUBLE) {
             snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
         } else if (tipo == TIPO_FLOAT) {
             snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
         } else if (tipo == TIPO_INT) {
             snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
-        } else {
-            snprintf(codigo, sizeof(codigo), "%s: .%s 0\n", nombreVariable, tipoDeclaracion);
+        } else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
+            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
         }
         insertarEnSeccionData(gen, codigo);
 
@@ -362,7 +649,9 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         if (tipo == TIPO_STRING) {
             snprintf(codigo, sizeof(codigo),
                 "    ldr x1, =%s\n"
-                "    str %s, [x1]\n", nombreVariable, resultado.resultado);
+                "    str %s, [x1]\n", 
+                nombreVariable, 
+                resultado.resultado[0] == 'x' ? resultado.resultado : "x0");
         } else if (tipo == TIPO_INT || tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
             snprintf(codigo, sizeof(codigo),
                 "    ldr x1, =%s\n"
@@ -370,130 +659,15 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         } else if (tipo == TIPO_DOUBLE || tipo == TIPO_FLOAT) {
             snprintf(codigo, sizeof(codigo),
                 "    ldr x1, =%s\n"
-                "    str d0, [x1]\n", nombreVariable); // Ajusta si usas otro registro para double/float
+                "    str d0, [x1]\n", nombreVariable);
         }
         insertarEnSeccionText(gen, codigo);
         return;
     }
 
-    if (valorNodo && valorNodo->tipo == AST_PARSEJOIN) {
-        printf("[DEBUG DECLARACION ARM64] String.join para '%s'\n", nombreVariable);
-        
-        // 1. Declaración en .data (puntero a string)
-        snprintf(codigo, sizeof(codigo),
-            "%s: .quad str_lit_%s\n"
-            "str_lit_%s: .asciz \"\"\n",
-            nombreVariable, nombreVariable, nombreVariable);
-        insertarEnSeccionData(gen, codigo);
-        
-        // 2. Generar código de String.join
-        generarStringJoinARM64(gen, nombreVariable, valorNodo);
-        
-        return;
-    }
-
-    if (valorNodo && valorNodo->tipo == AST_ACCESO) {
-        printf("[DEBUG DECLARACION] Acceso a vector en asignación a '%s'\n", nombreVariable);
-        
-        // 1. Declaración en .data
-        if (tipo == TIPO_STRING) {
-            snprintf(codigo, sizeof(codigo),
-                "%s: .quad str_lit_%s\n"
-                "str_lit_%s: .asciz \"\"\n",
-                nombreVariable, nombreVariable, nombreVariable);
-        } else if (tipo == TIPO_FLOAT) {
-            snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
-        } else if (tipo == TIPO_DOUBLE) {
-            snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
-        } else if (tipo == TIPO_CHAR) {
-            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
-        } else {
-            snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
-        }
-        insertarEnSeccionData(gen, codigo);
-        
-        // 2. Generar código de acceso
-        generarAccesoVectorARM64(gen, valorNodo, nombreVariable);
-        
-        return;
-    }
-
-    
-
-    // --- CASO: LITERALES O VARIABLES ---
+    // ✅ **CASO: Literales simples (int, float, string, char, boolean)**
     char valorStr[64] = "0";
     bool inicializado = false;
-
-    if (valorNodo && valorNodo->tipo == AST_CAST) {
-         printf("[DEBUG DECLARACION] Narrowing para %s\n", nombreVariable);
-        // 1. Declaración en .data
-        if (tipo == TIPO_FLOAT) {
-            snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
-            insertarEnSeccionData(gen, codigo);
-        } else if (tipo == TIPO_DOUBLE) {
-            snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
-            insertarEnSeccionData(gen, codigo);
-        } else if (tipo == TIPO_INT) {
-            snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
-            insertarEnSeccionData(gen, codigo);
-        } else if (tipo == TIPO_CHAR) {
-            snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
-            insertarEnSeccionData(gen, codigo);
-        }
-
-        // 2. Generar Narrowing ARM64
-        const char* nombreOrigen = NULL;
-        if (valorNodo->num_hijos >= 1) {
-            NodoAST* nodoOrigen = valorNodo->hijos[0];
-            if (nodoOrigen && nodoOrigen->tipo == AST_IDENTIFICADOR) {
-                nombreOrigen = nodoOrigen->valor;
-                printf("[DEBUG DECLARACION] Narrowing para %s viendo en %s\n", nombreVariable, nombreOrigen);
-            }
-        }
-        char codigoCarga[512] = "";
-        if (nombreOrigen) {
-            printf("[DEBUG DECLARACION] Narrowing para %s asignando en el .text\n", nombreVariable);
-            if (tipo == TIPO_FLOAT) {
-                snprintf(codigoCarga, sizeof(codigoCarga),
-                    "    // Narrowing: double -> float\n"
-                    "    ldr x1, =%s\n"
-                    "    ldr d0, [x1]\n"
-                    "    fcvt s0, d0\n"
-                    "    ldr x1, =%s\n"
-                    "    str s0, [x1]\n",
-                    nombreOrigen, nombreVariable);
-            } else if (tipo == TIPO_INT) {
-                snprintf(codigoCarga, sizeof(codigoCarga),
-                    "    // Narrowing: float -> int\n"
-                    "    ldr x1, =%s\n"
-                    "    ldr s0, [x1]\n"
-                    "    fcvtzs w0, s0\n"
-                    "    ldr x1, =%s\n"
-                    "    str w0, [x1]\n",
-                    nombreOrigen, nombreVariable);
-            } else if (tipo == TIPO_CHAR) {
-                snprintf(codigoCarga, sizeof(codigoCarga),
-                    "    // Narrowing: int -> char\n"
-                    "    ldr x1, =%s\n"
-                    "    ldr w0, [x1]\n"
-                    "    ldr x1, =%s\n"
-                    "    strb w0, [x1]\n",
-                    nombreOrigen, nombreVariable);
-            } else if (tipo == TIPO_INT && valorNodo->hijos[0]->tipo == TIPO_DOUBLE) {
-                snprintf(codigoCarga, sizeof(codigoCarga),
-                    "    // Narrowing: double -> int\n"
-                    "    ldr x1, =%s\n"
-                    "    ldr d0, [x1]\n"
-                    "    fcvtzs w0, d0\n"
-                    "    ldr x1, =%s\n"
-                    "    str w0, [x1]\n",
-                    nombreOrigen, nombreVariable);
-            }
-            printf("[DEBUG ARM64] Insertando Narrowing: %s\n", codigoCarga);
-            insertarEnSeccionText(gen, codigoCarga);
-        }
-        return;
-    }
 
     if (valorNodo && valorNodo->valor) {
         inicializado = true;
@@ -527,17 +701,16 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
             snprintf(nombreLiteral, sizeof(nombreLiteral), "str_lit_%s", nombreVariable);
             char patron[128];
             snprintf(patron, sizeof(patron), "%s:", nombreLiteral);
-            // Inserta el literal solo si no existe
+            
             if (!strstr(gen->buffer, patron)) {
                 snprintf(codigo, sizeof(codigo), "%s: .asciz %s\n", nombreLiteral, valorStr);
                 insertarEnSeccionData(gen, codigo);
             }
-            // Inserta la variable puntero solo una vez
+            
             snprintf(codigo, sizeof(codigo), "%s: .quad %s\n", nombreVariable, nombreLiteral);
             insertarEnSeccionData(gen, codigo);
-            return; // <-- IMPORTANTE: evita que siga insertando más abajo
-        } else if(tipo == TIPO_FLOAT){
-            // Quitar la 'f' si viene en el literal (opcional)
+            return;
+        } else if (tipo == TIPO_FLOAT) {
             char valorFloat[32];
             strncpy(valorFloat, valorStr, sizeof(valorFloat));
             valorFloat[sizeof(valorFloat)-1] = '\0';
@@ -553,14 +726,12 @@ void generarDeclaracionVariable(GeneradorDeclaraciones* gen, NodoAST* nodo, bool
         }
     } else {
         if (tipo == TIPO_STRING) {
-            // CORRECCIÓN: inicializa como puntero a cadena vacía
             snprintf(codigo, sizeof(codigo),
                 "%s: .quad str_lit_%s\n"
                 "str_lit_%s: .asciz \"\"\n",
                 nombreVariable, nombreVariable, nombreVariable);
             insertarEnSeccionData(gen, codigo);
         } else {
-            // Variable no inicializada va a .bss
             size_t espacio = 4;
             if (tipo == TIPO_DOUBLE) espacio = 8;
             else if (tipo == TIPO_FLOAT) espacio = 4;

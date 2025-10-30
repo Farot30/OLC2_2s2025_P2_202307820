@@ -1,0 +1,131 @@
+
+public static void main(){
+ System.out.println("=== SISTEMA DE GESTION DE INVENTARIO ===");
+    
+    // Declaración
+    System.out.println("\n--- DECLARACION DE ARREGLOS ---");
+    
+    // Declaración con inicialización directa
+    String[] productos = {"Laptop", "Mouse", "Teclado", "Monitor", "Impresora"};
+    int[] precios = {15000, 250, 800, 3500, 2200};
+    int[] cantidades = {10, 50, 30, 15, 8};
+    boolean[] disponibles = {true, true, true, true, false};
+    
+    // Declaración con tamaño específico
+    int[] codigosProducto = new int[5];
+    String[] proveedores = new String[5];
+    
+    System.out.println("Arreglos declarados exitosamente:");
+    System.out.println("- productos: arreglo de String con " + productos.length + " elementos");
+    System.out.println("- precios: arreglo de int con " + precios.length + " elementos");
+    System.out.println("- cantidades: arreglo de int con "+  cantidades.length + " elementos");
+    System.out.println("- disponibles: arreglo de boolean con " + disponibles.length + " elementos");
+    System.out.println("- codigosProducto: arreglo vacío de " + codigosProducto.length + " elementos");
+    System.out.println("- proveedores: arreglo vacío de " + proveedores.length + " elementos");
+
+System.out.println("\n--- MODIFICACION DE ELEMENTOS ---");
+    
+    // Modificar elementos en diferentes posiciones
+    System.out.println("Estado inicial del Mouse:");
+    System.out.println("- Precio: " );
+	System.out.println(precios[1]);
+System.out.println("- Cantidad: " );
+System.out.println(cantidades[1]);    
+System.out.println("- Disponible: ");
+System.out.println(disponibles[1]);
+
+
+codigosProducto[0] = 1001;
+    codigosProducto[1] = 1002;
+    codigosProducto[2] = 1003;
+    codigosProducto[3] = 1004;
+    codigosProducto[4] = 1005;
+
+System.out.println("Códigos y proveedores asignados correctamente");
+    
+    // Acceso a elementos
+    System.out.println("\n--- ACCESO A ELEMENTOS ---");
+    
+    System.out.println("Inventario completo:");
+    for (int i = 0; i < productos.length; i++) {
+        System.out.println("Posición " + String.valueOf(i) + ":");
+        System.out.println("  Código: ");
+	System.out.println(codigosProducto[i]);
+    System.out.println("  Producto: ");
+    System.out.println("  Precio: Q");
+    System.out.println(precios[i]);
+    System.out.println("  Cantidad: Q");
+    System.out.println(cantidades[i]);
+
+    }
+
+
+    precios[1] = 280; // Aumentar precio del mouse
+    cantidades[1] = 45; // Reducir cantidad
+    disponibles[4] = true; // Activar disponibilidad de impresora
+    
+
+System.out.println("\nDespués de modificaciones:");
+    System.out.println("- Nuevo precio Mouse: ");
+System.out.println(precios[1]);
+    System.out.println("- Nueva cantidad Mouse: ");
+System.out.println(cantidades[1]);
+    System.out.println("- Impresora ahora disponible: " );
+System.out.println(disponibles[4]);
+
+
+
+int codigoBuscado = 1003;
+    int posicionCodigo = Arrays.indexOf(codigosProducto, codigoBuscado);
+    System.out.println("Código " + String.valueOf(codigoBuscado) + " encontrado en posición: " + String.valueOf(posicionCodigo));
+
+
+ // Buscar elemento que no existe
+    String productoInexistente = "Tablet";
+    int posicionInexistente = Arrays.indexOf(productos, productoInexistente);
+    System.out.println("Búsqueda de '" + productoInexistente + "': " + posicionInexistente + " (no encontrado)");
+
+
+
+System.out.println("\n--- TAMAÑO DE ARREGLOS (length) ---");
+    
+    int totalProductos = productos.length;
+    int totalPrecios = precios.length;
+    int totalCantidades = cantidades.length;
+    int totalDisponibles = disponibles.length;
+    
+    System.out.println("Información de tamaños:");
+    System.out.println("- Productos: " + String.valueOf(totalProductos) + " elementos");
+    System.out.println("- Precios: " + String.valueOf(totalPrecios) + " elementos");
+    System.out.println("- Cantidades: " + String.valueOf(totalCantidades) + " elementos");
+    System.out.println("- Disponibilidad: " + String.valueOf(totalDisponibles) + " elementos");
+
+boolean datosConsistentes = (totalProductos == totalPrecios) && 
+                               (totalPrecios == totalCantidades) && 
+                               (totalCantidades == totalDisponibles);
+    System.out.println("Todos los arreglos tienen el mismo tamaño: " + String.valueOf(datosConsistentes));
+
+
+System.out.println("\nUso de length en iteraciones:");
+    int productosDisponibles = 0;
+    for (int is = 0; is < disponibles.length; is++) {
+        if (disponibles[is]) {
+            productosDisponibles++;
+        }
+    }
+    System.out.println("Productos disponibles: " + String.valueOf(productosDisponibles) + " de " + String.valueOf(totalProductos));
+    
+ System.out.println("\n--- AGREGAR ELEMENTOS CON add() ---");
+    
+    // Agregar nuevos productos
+    System.out.println("Estado inicial: " + productos.length + " productos");
+    
+    int[] preciosAmpliados = precios.add(450);
+    preciosAmpliados = preciosAmpliados.add(320);
+    preciosAmpliados = preciosAmpliados.add(180);
+    
+    int[] cantidadesAmpliadas = cantidades.add(25);
+    cantidadesAmpliadas = cantidadesAmpliadas.add(40);
+    cantidadesAmpliadas = cantidadesAmpliadas.add(15);
+
+}

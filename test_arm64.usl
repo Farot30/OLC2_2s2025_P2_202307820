@@ -1,6 +1,18 @@
-public static void main() {
-    int x = 42;
-    float y = 3.14;
+String generarMensaje(int calificacion) {
+    calificacion -= 5;
+    String resultado = "Generar mensaje Estudiante: Carlos Perez - Calificación: " + String.valueOf(calificacion);
+    if (calificacion >= 90) {
+        resultado = resultado + " - EXCELENTE";
+    } else if (calificacion >= 80) {
+        resultado = resultado + " - MUY BUENO";
+    } else {
+        resultado = resultado + " - REGULAR";
+    }
+    return resultado;
 }
 
-para correr mi programa en ARM64 make archivo_salida.s y make run
+public static void main(){
+
+System.out.println("hola mundo solo declaracioń de funciones");
+
+}

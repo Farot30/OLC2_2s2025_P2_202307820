@@ -7,8 +7,14 @@
 #include "../Embebidas/EvaluadorExpr_arm64.h"
 #include <string.h>
 #include <stdlib.h>
-
+#include "../Funciones/Funciones_arm64.h"
+extern PilaAmbitosRetorno pilaAmbitosRetorno;
 extern NodoAST* astGlobal;
+void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
+void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
+void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
+void generarCodigoRecursivoChar(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
+void generarCodigoRecursivoBoolean(NodoAST* nodo, char* codigoOperacion, int* regIndex, GeneradorDeclaraciones* gen);
 
 TipoDato detectarTipoLiteral(const char* valor) {
     // Si contiene punto decimal, es float o double
@@ -81,7 +87,22 @@ void generarCodigoRecursivoBoolean(NodoAST* nodo, char* codigoOperacion, int* re
             *regIndex += 2;
 
             // Cargar operando izquierdo
-            if (izq->tipo == AST_NUMERO) {
+            if (izq->tipo == AST_LENGHT) {
+                printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando izquierdo\n");
+                ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, izq, regIndex);
+                strcat(codigoOperacion, resLength.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resLength.resultado);
+                strcat(codigoOperacion, buffer);
+                (*regIndex)++;
+            } 
+            else if (izq->tipo == AST_ACCESO) {
+                printf("[DEBUG RECURSIVO BOOL] Procesando acceso en comparación izquierda\n");
+                ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, izq, regIndex);
+                strcat(codigoOperacion, resAcceso.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resAcceso.resultado);
+                strcat(codigoOperacion, buffer);
+            }
+            else if (izq->tipo == AST_NUMERO) {
                 snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regIzq, atoi(izq->valor));
                 strcat(codigoOperacion, buffer);
             } else if (izq->tipo == AST_IDENTIFICADOR) {
@@ -96,7 +117,22 @@ void generarCodigoRecursivoBoolean(NodoAST* nodo, char* codigoOperacion, int* re
             }
 
             // Cargar operando derecho
-            if (der->tipo == AST_NUMERO) {
+            if (der->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando derecho\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+            }
+            else if (der->tipo == AST_ACCESO) {
+                printf("[DEBUG RECURSIVO BOOL] Procesando acceso en comparación derecha\n");
+                ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, der, regIndex);
+                strcat(codigoOperacion, resAcceso.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resAcceso.resultado);
+                strcat(codigoOperacion, buffer);
+            }
+            else if (der->tipo == AST_NUMERO) {
                 snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regDer, atoi(der->valor));
                 strcat(codigoOperacion, buffer);
             } else if (der->tipo == AST_IDENTIFICADOR) {
@@ -170,6 +206,20 @@ void generarCodigoRecursivoBoolean(NodoAST* nodo, char* codigoOperacion, int* re
         }
     } 
     // **NODOS HOJA**
+    else if (nodo->tipo == AST_LENGHT) {
+        printf("[DEBUG RECURSIVO INT] Procesando Array.length en nodo hoja\n");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov w0, %s\n", resLength.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG RECURSIVO BOOL] Procesando acceso en nodo hoja\n");
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov w0, %s\n", resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+    }
     else if (nodo->tipo == AST_NUMERO) {
         snprintf(buffer, sizeof(buffer),
             "    mov w0, #%d\n", atoi(nodo->valor));
@@ -468,6 +518,92 @@ void cargarOperandoGeneral(NodoAST* nodo, const char* registro, TipoDato tipoDes
                 "    ldr x2, =%s\n"
                 "    ldr %s, [x2]\n", nodo->valor, registro);
         }
+    } else if (nodo->tipo == AST_ACCESO) {
+        int regIndexTmp = 1;
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, &regIndexTmp);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov %s, %s\n", registro, resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+        return;
+    } else if (nodo->tipo == AST_LENGHT) {
+        int regIndexTmp = 1;
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, &regIndexTmp);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov %s, %s\n", registro, resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+    } else if (nodo->tipo == AST_CAST) {
+        // El nodo AST_CAST tiene:
+        // - nodo->valor: tipo destino del cast (ej: "double", "int")
+        // - nodo->hijos[0]: la expresión a castear (puede ser AST_LENGHT, AST_ACCESO, etc.)
+        
+        TipoDato tipoCast = obtenerTipoDesdeString(nodo->valor);
+        NodoAST* expr = nodo->num_hijos >= 1 ? nodo->hijos[0] : NULL;
+        
+        if (!expr) {
+            printf("[ERROR CAST] Cast sin expresión\n");
+            strcat(codigoOperacion, "    // ERROR: Cast sin expresión\n");
+            return;
+        }
+        
+        TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+        
+        printf("[DEBUG CAST] cargarOperandoGeneral: Evaluando cast de tipo %d (%s) a %d (%s)\n",
+            tipoExpr, obtenerNombreTipo(tipoExpr), tipoCast, obtenerNombreTipo(tipoCast));
+        
+        // 1. EVALUAR LA EXPRESIÓN INTERNA (puede ser AST_LENGHT, AST_ACCESO, etc.)
+        int regIndexTmp = 2;
+        ResultadoExprEmbebida resExpr = generarExprEmbebidaARM64(gen, expr, &regIndexTmp);
+        
+        // Copiar el código generado
+        strcat(codigoOperacion, resExpr.codigo);
+        
+        printf("[DEBUG CAST] Expresión evaluada: resultado=%s, tipo=%d\n", 
+            resExpr.resultado, resExpr.tipo);
+        
+        // 2. APLICAR LA CONVERSIÓN DE TIPO
+        // El resultado viene en resExpr.resultado (puede ser wN, sN, dN, xN)
+        
+        if (tipoDestino == TIPO_DOUBLE) {
+            // Conversión a double
+            if (resExpr.tipo == TIPO_INT || tipoExpr == TIPO_INT) {
+                // int -> double: scvtf dN, wM
+                snprintf(buffer, sizeof(buffer), "    scvtf %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_FLOAT || tipoExpr == TIPO_FLOAT) {
+                // float -> double: fcvt dN, sM
+                snprintf(buffer, sizeof(buffer), "    fcvt %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_DOUBLE || tipoExpr == TIPO_DOUBLE) {
+                // double -> double: fmov dN, dM
+                snprintf(buffer, sizeof(buffer), "    fmov %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_CHAR || tipoExpr == TIPO_CHAR) {
+                // char -> double: scvtf dN, wM
+                snprintf(buffer, sizeof(buffer), "    scvtf %s, %s\n", registro, resExpr.resultado);
+            }
+        } else if (tipoDestino == TIPO_FLOAT) {
+            // Conversión a float
+            if (resExpr.tipo == TIPO_INT || tipoExpr == TIPO_INT) {
+                snprintf(buffer, sizeof(buffer), "    scvtf %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_FLOAT || tipoExpr == TIPO_FLOAT) {
+                snprintf(buffer, sizeof(buffer), "    fmov %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_DOUBLE || tipoExpr == TIPO_DOUBLE) {
+                // double -> float: fcvt sN, dM
+                snprintf(buffer, sizeof(buffer), "    fcvt %s, %s\n", registro, resExpr.resultado);
+            }
+        } else if (tipoDestino == TIPO_INT) {
+            // Conversión a int
+            if (resExpr.tipo == TIPO_INT || tipoExpr == TIPO_INT) {
+                snprintf(buffer, sizeof(buffer), "    mov %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_FLOAT || tipoExpr == TIPO_FLOAT) {
+                // float -> int: fcvtzs wN, sM
+                snprintf(buffer, sizeof(buffer), "    fcvtzs %s, %s\n", registro, resExpr.resultado);
+            } else if (resExpr.tipo == TIPO_DOUBLE || tipoExpr == TIPO_DOUBLE) {
+                // double -> int: fcvtzs wN, dM
+                snprintf(buffer, sizeof(buffer), "    fcvtzs %s, %s\n", registro, resExpr.resultado);
+            }
+        }
+        
+        strcat(codigoOperacion, buffer);
+        printf("[DEBUG CAST] Código de conversión generado:\n%s\n", buffer);
+        return;
     }
     
     strcat(codigoOperacion, buffer);
@@ -562,7 +698,79 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
 
         // **PASO 1: Evaluar operando izquierdo**
         int regIzq = *regIndex;
-        if (izq->tipo == AST_NUMERO) {
+        if (izq->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO DOUBLE] Procesando Array.length en operando izquierdo\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov d%d, %s\n", regIzq, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }else if (izq->tipo == AST_CAST) {
+            printf("[DEBUG RECURSIVO DOUBLE] Procesando cast explícito en operando izquierdo\n");
+            
+            // CORRECCIÓN: El tipo está en izq->valor, la expresión en izq->hijos[0]
+            TipoDato tipoCast = obtenerTipoDesdeString(izq->valor);
+            NodoAST* expr = izq->num_hijos >= 1 ? izq->hijos[0] : NULL;
+            
+            if (!expr) {
+                printf("[ERROR] Cast sin expresión en operando izquierdo\n");
+                return;
+            }
+            
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+            printf("[DEBUG CAST] Cast de tipo %d (%s) a %d (%s)\n", 
+                tipoExpr, obtenerNombreTipo(tipoExpr),
+                tipoCast, obtenerNombreTipo(tipoCast));
+            
+            // 1. Evaluar la expresión según su tipo ORIGINAL
+            if (tipoExpr == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regIzq);
+            } else if (tipoExpr == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regIzq);
+            } else if (tipoExpr == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            } else if (tipoExpr == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // 2. Convertir al tipo DESTINO de la operación actual (double en este caso)
+            // El contexto es generarCodigoRecursivoDouble, así que necesitamos double
+            if (esWidening(tipoExpr, TIPO_DOUBLE)) {
+                if (tipoExpr == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != TIPO_DOUBLE) {
+                // Narrowing (el cast ya debería haber convertido al tipo correcto)
+                // Solo necesitamos asegurar que esté en double para esta operación
+                if (tipoCast == TIPO_FLOAT) {
+                    // float -> double
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regIzq, regIzq);
+                } else if (tipoCast == TIPO_INT) {
+                    // int -> double
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                }
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO DOUBLE] Procesando acceso en operando izquierdo\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov d%d, %s\n", regIzq, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_NUMERO) {
             TipoDato tipoLiteral = detectarTipoLiteral(izq->valor);
             if (tipoLiteral == TIPO_INT) {
                 snprintf(buffer, sizeof(buffer),
@@ -617,7 +825,73 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
 
         // **PASO 2: Evaluar operando derecho**
         int regDer = *regIndex;
-        if (der->tipo == AST_NUMERO) {
+        if (der->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando derecho\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }else if (der->tipo == AST_CAST) {
+            printf("[DEBUG RECURSIVO DOUBLE] Procesando cast explícito en operando derecho\n");
+            
+            TipoDato tipoCast = obtenerTipoDesdeString(der->valor);
+            NodoAST* expr = der->num_hijos >= 1 ? der->hijos[0] : NULL;
+            
+            if (!expr) {
+                printf("[ERROR] Cast sin expresión en operando derecho\n");
+                return;
+            }
+            
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+            
+            printf("[DEBUG CAST] Cast de tipo %d a %d (operando derecho)\n", tipoExpr, tipoCast);
+            
+            // Evaluar la expresión según su tipo original
+            if (tipoExpr == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regDer);
+            } else if (tipoExpr == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regDer);
+            } else if (tipoExpr == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            } else if (tipoExpr == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, regIndex, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            }
+            strcat(codigoOperacion, buffer);
+            
+            // Convertir a double para la operación
+            if (esWidening(tipoExpr, TIPO_DOUBLE)) {
+                if (tipoExpr == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != TIPO_DOUBLE) {
+                if (tipoCast == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regDer, regDer);
+                } else if (tipoCast == TIPO_INT) {
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                }
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+
+        else if (der->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO DOUBLE] Procesando acceso en operando derecho\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov d%d, %s\n", regDer, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_NUMERO) {
             TipoDato tipoLiteral = detectarTipoLiteral(der->valor);
             if (tipoLiteral == TIPO_INT) {
                 snprintf(buffer, sizeof(buffer),
@@ -722,7 +996,21 @@ void generarCodigoRecursivoDouble(NodoAST* nodo, char* codigoOperacion, int* reg
                 "    scvtf d0, w0\n", regIzq, regDer);
         }
         strcat(codigoOperacion, buffer);
-    } else if (nodo->tipo == AST_NUMERO) {
+    } else if (nodo->tipo == AST_LENGHT) {
+        printf("[DEBUG RECURSIVO DOUBLE] Procesando Array.length en nodo hoja\n");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov d0, %s\n", resLength.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG RECURSIVO DOUBLE] Procesando acceso en nodo hoja\n");
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov d0, %s\n", resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_NUMERO) {
         // **NODO HOJA: Cargar directamente en d0**
         TipoDato tipoLiteral = detectarTipoLiteral(nodo->valor);
 
@@ -768,7 +1056,75 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
 
         // **PASO 1: Evaluar operando izquierdo**
         int regIzq = *regIndex;
-        if (izq->tipo == AST_NUMERO) {
+
+        if (izq->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO FLOAT] Procesando Array.length en operando izquierdo\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    scvtf s%d, %s\n", regIzq, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        } else if (izq->tipo == AST_CAST) {
+            NodoAST* tipoDestino = izq->hijos[0];
+            NodoAST* expr = izq->hijos[1];
+            TipoDato tipoCast = obtenerTipoDesdeString(tipoDestino->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+
+            // Recursivamente genera el código para la expresión
+            int regTmp = regIzq;
+            if (tipoCast == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regIzq);
+            } else if (tipoCast == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regIzq);
+            } else if (tipoCast == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            } else if (tipoCast == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // Widening/Narrowing
+            if (esWidening(tipoExpr, tipoCast)) {
+                if (tipoExpr == TIPO_INT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    // Widening char->int ya está en w%d\n", regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != tipoCast) {
+                // Narrowing
+                if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt s%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    // Narrowing int->char ya está en w%d\n", regIzq);
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO FLOAT] Procesando acceso en operando izquierdo\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", regIzq, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_NUMERO) {
             TipoDato tipoLiteral = detectarTipoLiteral(izq->valor);
             if (tipoLiteral == TIPO_INT) {
                 snprintf(buffer, sizeof(buffer),
@@ -809,7 +1165,75 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
 
         // **PASO 2: Evaluar operando derecho**
         int regDer = *regIndex;
-        if (der->tipo == AST_NUMERO) {
+        if (der->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO FLOAT] Procesando Array.length en operando derecho\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    scvtf s%d, %s\n", regDer, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_CAST) {
+            NodoAST* tipoDestino = der->hijos[0];
+            NodoAST* expr = der->hijos[1];
+            TipoDato tipoCast = obtenerTipoDesdeString(tipoDestino->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+
+            int regTmp = regDer;
+            // Recursivamente genera el código para la expresión
+            if (tipoCast == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regDer);
+            } else if (tipoCast == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regDer);
+            } else if (tipoCast == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            } else if (tipoCast == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // Widening/Narrowing
+            if (esWidening(tipoExpr, tipoCast)) {
+                if (tipoExpr == TIPO_INT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    // Widening char->int ya está en w%d\n", regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != tipoCast) {
+                // Narrowing
+                if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt s%d, d%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, s%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, d%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    // Narrowing int->char ya está en w%d\n", regDer);
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO FLOAT] Procesando acceso en operando derecho\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", regDer, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_NUMERO) {
             TipoDato tipoLiteral = detectarTipoLiteral(der->valor);
             if (tipoLiteral == TIPO_INT) {
                 snprintf(buffer, sizeof(buffer),
@@ -889,7 +1313,21 @@ void generarCodigoRecursivoFloat(NodoAST* nodo, char* codigoOperacion, int* regI
                 "    scvtf s0, w0\n", regIzq, regDer);
         }
         strcat(codigoOperacion, buffer);
-    } else if (nodo->tipo == AST_NUMERO) {
+    } else if (nodo->tipo == AST_LENGHT) {
+        printf("[DEBUG RECURSIVO DOUBLE] Procesando Array.length en nodo hoja\n");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov d0, %s\n", resLength.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG RECURSIVO FLOAT] Procesando acceso en nodo hoja\n");
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov s0, %s\n", resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+    } 
+    else if (nodo->tipo == AST_NUMERO) {
         // **NODO HOJA: Cargar directamente en s0**
         TipoDato tipoLiteral = detectarTipoLiteral(nodo->valor);
 
@@ -933,20 +1371,97 @@ void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regInd
         NodoAST* izq = nodo->hijos[0];
         NodoAST* der = nodo->hijos[1];
 
+
+        printf("[DEBUG RECURSIVO INT] Operación '%s' detectada\n", nodo->valor);
+        printf("[DEBUG RECURSIVO INT] Operando izquierdo: tipo=%d, valor=%s\n", 
+               izq->tipo, izq->valor ? izq->valor : "(null)");
+        printf("[DEBUG RECURSIVO INT] Operando derecho: tipo=%d, valor=%s\n", 
+               der->tipo, der->valor ? der->valor : "(null)");
         // **PASO 1: Evaluar operando izquierdo**
         int regIzq = *regIndex;
-        if (izq->tipo == AST_NUMERO) {
+        
+        if (izq->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando izquierdo\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        } else if (izq->tipo == AST_CAST) {
+            NodoAST* tipoDestino = izq->hijos[0];
+            NodoAST* expr = izq->hijos[1];
+            TipoDato tipoCast = obtenerTipoDesdeString(tipoDestino->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+
+            // Recursivamente genera el código para la expresión
+            int regTmp = regIzq;
+            if (tipoCast == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regIzq);
+            } else if (tipoCast == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regIzq);
+            } else if (tipoCast == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            } else if (tipoCast == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // Widening/Narrowing
+            if (esWidening(tipoExpr, tipoCast)) {
+                if (tipoExpr == TIPO_INT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    // Widening char->int ya está en w%d\n", regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != tipoCast) {
+                // Narrowing
+                if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt s%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    // Narrowing int->char ya está en w%d\n", regIzq);
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO INT] Procesando acceso en operando izquierdo\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            printf("[DEBUG RECURSIVO INT] Código de acceso izquierdo generado: %s\n", resAcceso.codigo);
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_NUMERO) {
+            printf("[DEBUG RECURSIVO INT] Cargando número literal izquierdo: %s\n", izq->valor);
             snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regIzq, atoi(izq->valor));
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (izq->tipo == AST_IDENTIFICADOR) {
-            // **NUEVO: Cargar valor de variable**
+            printf("[DEBUG RECURSIVO INT] Cargando variable izquierda: %s\n", izq->valor);
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
                 "    ldr w%d, [x%d]\n", regIzq, izq->valor, regIzq, regIzq);
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (izq->tipo == AST_OPERACION) {
+            printf("[DEBUG RECURSIVO INT] Evaluando operación anidada izquierda\n");
             generarCodigoRecursivoInt(izq, codigoOperacion, regIndex, gen);
             snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
             strcat(codigoOperacion, buffer);
@@ -955,18 +1470,78 @@ void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regInd
 
         // **PASO 2: Evaluar operando derecho**
         int regDer = *regIndex;
-        if (der->tipo == AST_NUMERO) {
+        
+        if (der->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando derecho\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        } else if (der->tipo == AST_CAST) {
+            printf("[DEBUG RECURSIVO INT] Procesando cast explícito en operando derecho\n");
+            NodoAST* tipoCastNodo = der->hijos[0];
+            NodoAST* expr = der->num_hijos >= 1 ? der->hijos[0] : NULL;
+            
+            if (!expr) {
+                printf("[ERROR] Cast sin expresión\n");
+                return;
+            }
+            
+            // El valor del nodo es el tipo destino (ej: "int", "float")
+            TipoDato tipoCast = obtenerTipoDesdeString(der->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+            
+            printf("[DEBUG CAST] Cast de tipo %d a %d\n", tipoExpr, tipoCast);
+            
+            // Evaluar la expresión recursivamente
+            int regTmp = regDer;
+            if (expr->tipo == AST_LENGHT) {
+                ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, expr, regIndex);
+                strcat(codigoOperacion, resLength.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resLength.resultado);
+                strcat(codigoOperacion, buffer);
+            } else if (expr->tipo == AST_ACCESO) {
+                ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, expr, regIndex);
+                strcat(codigoOperacion, resAcceso.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resAcceso.resultado);
+                strcat(codigoOperacion, buffer);
+            } else if (expr->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x%d, =%s\n"
+                    "    ldr w%d, [x%d]\n", regDer, expr->valor, regDer, regDer);
+                strcat(codigoOperacion, buffer);
+            } else if (expr->tipo == AST_NUMERO) {
+                snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regDer, atoi(expr->valor));
+                strcat(codigoOperacion, buffer);
+            }
+            
+            // No hacemos conversión aquí porque es int a int (narrowing se maneja en el destino)
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO INT] Procesando acceso en operando derecho\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            printf("[DEBUG RECURSIVO INT] Código de acceso derecho generado: %s\n", resAcceso.codigo);
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_NUMERO) {
+            printf("[DEBUG RECURSIVO INT] Cargando número literal derecho: %s\n", der->valor);
             snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regDer, atoi(der->valor));
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (der->tipo == AST_IDENTIFICADOR) {
-            // **NUEVO: Cargar valor de variable**
+            printf("[DEBUG RECURSIVO INT] Cargando variable derecha: %s\n", der->valor);
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
                 "    ldr w%d, [x%d]\n", regDer, der->valor, regDer, regDer);
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
         } else if (der->tipo == AST_OPERACION) {
+            printf("[DEBUG RECURSIVO INT] Evaluando operación anidada derecha\n");
             generarCodigoRecursivoInt(der, codigoOperacion, regIndex, gen);
             snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
             strcat(codigoOperacion, buffer);
@@ -974,6 +1549,8 @@ void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regInd
         }
 
         // **PASO 3: Generar la operación entre los dos operandos**
+        printf("[DEBUG RECURSIVO INT] Generando operación '%s' entre w%d y w%d\n", 
+               nodo->valor, regIzq, regDer);
         if (strcmp(nodo->valor, "+") == 0) {
             snprintf(buffer, sizeof(buffer), "    add w0, w%d, w%d\n", regIzq, regDer);
         } else if (strcmp(nodo->valor, "-") == 0) {
@@ -1032,11 +1609,29 @@ void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regInd
                 "    cset w0, ne\n", regIzq, regDer);
         }
         strcat(codigoOperacion, buffer);
-    } else if (nodo->tipo == AST_NUMERO) {
+        printf("[DEBUG RECURSIVO INT] Código de operación generado: %s\n", buffer);
+    } else if (nodo->tipo == AST_LENGHT) {
+        printf("[DEBUG RECURSIVO DOUBLE] Procesando Array.length en nodo hoja\n");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov d0, %s\n", resLength.resultado);
+        strcat(codigoOperacion, buffer);
+    } 
+    else if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG RECURSIVO INT] Procesando acceso en nodo hoja\n");
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov w0, %s\n", resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+        printf("[DEBUG RECURSIVO INT] Código de acceso hoja generado: %s\n", resAcceso.codigo);
+    }  
+    else if (nodo->tipo == AST_NUMERO) {
+        printf("[DEBUG RECURSIVO INT] Nodo hoja: número literal %s\n", nodo->valor);
         // **NODO HOJA: Cargar número directamente en w0**
         TipoDato tipoLiteral = detectarTipoLiteral(nodo->valor);
 
         if (tipoLiteral == TIPO_INT) {
+            
             snprintf(buffer, sizeof(buffer), "    mov w0, #%d\n", atoi(nodo->valor));
         } else if (tipoLiteral == TIPO_FLOAT || tipoLiteral == TIPO_DOUBLE) {
             char nombreConst[32];
@@ -1050,6 +1645,7 @@ void generarCodigoRecursivoInt(NodoAST* nodo, char* codigoOperacion, int* regInd
         }
         strcat(codigoOperacion, buffer);
     } else if (nodo->tipo == AST_IDENTIFICADOR) {
+        printf("[DEBUG RECURSIVO INT] Nodo hoja: identificador %s\n", nodo->valor);
         // **NODO HOJA: Cargar variable directamente en w0**
         snprintf(buffer, sizeof(buffer),
             "    ldr x1, =%s\n"
@@ -1069,7 +1665,74 @@ void generarCodigoRecursivoChar(NodoAST* nodo, char* codigoOperacion, int* regIn
 
         // **PASO 1: Evaluar operando izquierdo**
         int regIzq = *regIndex;
-        if (izq->tipo == AST_NUMERO) {
+        if (izq->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando izquierdo\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        } else if (izq->tipo == AST_CAST) {
+            NodoAST* tipoDestino = izq->hijos[0];
+            NodoAST* expr = izq->hijos[1];
+            TipoDato tipoCast = obtenerTipoDesdeString(tipoDestino->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+
+            // Recursivamente genera el código para la expresión
+            int regTmp = regIzq;
+            if (tipoCast == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regIzq);
+            } else if (tipoCast == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regIzq);
+            } else if (tipoCast == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            } else if (tipoCast == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regIzq);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // Widening/Narrowing
+            if (esWidening(tipoExpr, tipoCast)) {
+                if (tipoExpr == TIPO_INT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    // Widening char->int ya está en w%d\n", regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regIzq, regIzq);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != tipoCast) {
+                // Narrowing
+                if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt s%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, s%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, d%d\n", regIzq, regIzq);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    // Narrowing int->char ya está en w%d\n", regIzq);
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO CHAR] Procesando acceso en operando izquierdo\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, izq, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regIzq, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (izq->tipo == AST_NUMERO) {
             snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regIzq, atoi(izq->valor));
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
@@ -1092,7 +1755,75 @@ void generarCodigoRecursivoChar(NodoAST* nodo, char* codigoOperacion, int* regIn
 
         // **PASO 2: Evaluar operando derecho**
         int regDer = *regIndex;
-        if (der->tipo == AST_NUMERO) {
+
+        if (der->tipo == AST_LENGHT) {
+            printf("[DEBUG RECURSIVO INT] Procesando Array.length en operando derecho\n");
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resLength.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resLength.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }else if (der->tipo == AST_CAST) {
+            NodoAST* tipoDestino = der->hijos[0];
+            NodoAST* expr = der->hijos[1];
+            TipoDato tipoCast = obtenerTipoDesdeString(tipoDestino->valor);
+            TipoDato tipoExpr = deducirTipoExprARM64(expr, astGlobal);
+
+            int regTmp = regDer;
+            // Recursivamente genera el código para la expresión
+            if (tipoCast == TIPO_DOUBLE) {
+                generarCodigoRecursivoDouble(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regDer);
+            } else if (tipoCast == TIPO_FLOAT) {
+                generarCodigoRecursivoFloat(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    fmov s%d, s0\n", regDer);
+            } else if (tipoCast == TIPO_INT) {
+                generarCodigoRecursivoInt(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            } else if (tipoCast == TIPO_CHAR) {
+                generarCodigoRecursivoChar(expr, codigoOperacion, &regTmp, gen);
+                snprintf(buffer, sizeof(buffer), "    mov w%d, w0\n", regDer);
+            }
+            strcat(codigoOperacion, buffer);
+
+            // Widening/Narrowing
+            if (esWidening(tipoExpr, tipoCast)) {
+                if (tipoExpr == TIPO_INT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    fcvt d%d, s%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    // Widening char->int ya está en w%d\n", regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    scvtf s%d, w%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_CHAR && tipoCast == TIPO_DOUBLE)
+                    snprintf(buffer, sizeof(buffer), "    scvtf d%d, w%d\n", regDer, regDer);
+                strcat(codigoOperacion, buffer);
+            } else if (tipoExpr != tipoCast) {
+                // Narrowing
+                if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_FLOAT)
+                    snprintf(buffer, sizeof(buffer), "    fcvt s%d, d%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_FLOAT && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, s%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_DOUBLE && tipoCast == TIPO_INT)
+                    snprintf(buffer, sizeof(buffer), "    fcvtzs w%d, d%d\n", regDer, regDer);
+                else if (tipoExpr == TIPO_INT && tipoCast == TIPO_CHAR)
+                    snprintf(buffer, sizeof(buffer), "    // Narrowing int->char ya está en w%d\n", regDer);
+                strcat(codigoOperacion, buffer);
+            }
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_ACCESO) {
+            printf("[DEBUG RECURSIVO CHAR] Procesando acceso en operando derecho\n");
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, der, regIndex);
+            strcat(codigoOperacion, resAcceso.codigo);
+            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", regDer, resAcceso.resultado);
+            strcat(codigoOperacion, buffer);
+            (*regIndex)++;
+        }
+        else if (der->tipo == AST_NUMERO) {
             snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regDer, atoi(der->valor));
             strcat(codigoOperacion, buffer);
             (*regIndex)++;
@@ -1162,7 +1893,21 @@ void generarCodigoRecursivoChar(NodoAST* nodo, char* codigoOperacion, int* regIn
                 "    cset w0, ge\n", regIzq, regDer);
         }
         strcat(codigoOperacion, buffer);
-    } else if (nodo->tipo == AST_NUMERO) {
+    } else if (nodo->tipo == AST_LENGHT) {
+        printf("[DEBUG RECURSIVO DOUBLE] Procesando Array.length en nodo hoja\n");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), "    fmov d0, %s\n", resLength.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_ACCESO) {
+        printf("[DEBUG RECURSIVO CHAR] Procesando acceso en nodo hoja\n");
+        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoOperacion, resAcceso.codigo);
+        snprintf(buffer, sizeof(buffer), "    mov w0, %s\n", resAcceso.resultado);
+        strcat(codigoOperacion, buffer);
+    }
+    else if (nodo->tipo == AST_NUMERO) {
         // **NODO HOJA: Cargar directamente en w0**
         snprintf(buffer, sizeof(buffer), "    mov w0, #%d\n", atoi(nodo->valor));
         strcat(codigoOperacion, buffer);
@@ -1188,22 +1933,128 @@ void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombre
             generarConcatenacionStringBuilder(gen, nombreVar, operacionNodo);
             return;
         }
-        // Si es simple, genera printf optimizado aquí o deja que lo maneje el evaluador
         printf("[DEBUG] Detectada concatenación SIMPLE de strings para variable '%s'\n", nombreVar);
-        // Aquí puedes llamar a tu generador de printf optimizado, o dejar que el evaluador lo maneje
-        // ...
     }
 
-    // **RESTO DE OPERACIONES (CÓDIGO EXISTENTE SIMPLIFICADO)**
+    // **RESTO DE OPERACIONES**
     char codigoOperacion[2048] = "";
     char buffer[256];
 
-    // Comentario inicial
     snprintf(buffer, sizeof(buffer), "    // Operación: %s = <expresión>\n", nombreVar);
     strcat(codigoOperacion, buffer);
 
+    printf("[DEBUG OP] Generando operación para '%s', tipo=%d, operador='%s'\n",
+        nombreVar, tipoVar, operacionNodo->valor ? operacionNodo->valor : "(null)");
+
+    // ✅ NUEVO: SI ESTAMOS EN UNA FUNCIÓN Y ES OPERACIÓN SIMPLE ENTRE PARÁMETROS, OPTIMIZAR
+    if (gen->dentro_de_funcion && gen->nombre_funcion_actual[0] != '\0') {
+        extern PilaAmbitosRetorno pilaAmbitosRetorno;
+        AmbitoFuncionRetorno* ambito = getAmbitoRetornoActual(&pilaAmbitosRetorno);
+        
+        if (ambito && operacionNodo->num_hijos == 2) {
+            NodoAST* izq = operacionNodo->hijos[0];
+            NodoAST* der = operacionNodo->hijos[1];
+            printf("[DEPURACIÓN OP] Operando izquierdo: tipo=%d, valor=%s\n", izq->tipo, izq->valor);
+        printf("[DEPURACIÓN OP] Operando derecho: tipo=%d, valor=%s\n", der->tipo, der->valor);
+            
+            // ✅ VERIFICAR SI AMBOS SON IDENTIFICADORES (pueden ser parámetros o variables)
+            if (izq->tipo == AST_IDENTIFICADOR && der->tipo == AST_IDENTIFICADOR) {
+                int offsetIzq = -1, offsetDer = -1;
+                bool izqEsParam = false, derEsParam = false;
+                
+                // ✅ BUSCAR AMBOS OPERANDOS EN PARÁMETROS
+                for (int i = 0; i < ambito->ambito_base.numParametros; i++) {
+                    if (strcmp(ambito->ambito_base.parametros[i].nombre, izq->valor) == 0) {
+                        offsetIzq = i * 8;
+                        izqEsParam = true;
+                        printf("[DEBUG OP] Operando izquierdo '%s' es parámetro en offset %d\n", 
+                               izq->valor, offsetIzq);
+                    }
+                    if (strcmp(ambito->ambito_base.parametros[i].nombre, der->valor) == 0) {
+                        offsetDer = i * 8;
+                        derEsParam = true;
+                        printf("[DEBUG OP] Operando derecho '%s' es parámetro en offset %d\n", 
+                               der->valor, offsetDer);
+                    }
+                }
+                
+                // ✅ SI AMBOS SON PARÁMETROS, GENERAR CÓDIGO OPTIMIZADO
+                if (izqEsParam && derEsParam) {
+                    printf("[DEBUG OP] GENERANDO CÓDIGO PARA PARÁMETROS: %s %s %s\n", 
+                           izq->valor, operacionNodo->valor, der->valor);
+                    
+                    // ✅ DETERMINAR NOMBRE REAL DE LA VARIABLE (puede ser local)
+                    char nombreReal[128];
+                    bool esVarLocal = false;
+                    for (int i = 0; i < ambito->ambito_base.numVariables; i++) {
+                        if (strcmp(ambito->ambito_base.variables[i].nombre, nombreVar) == 0) {
+                            snprintf(nombreReal, sizeof(nombreReal), "%s_%s", 
+                                    gen->nombre_funcion_actual, nombreVar);
+                            esVarLocal = true;
+                            printf("[DEBUG OP] Variable '%s' es local, usando nombre: %s\n", 
+                                   nombreVar, nombreReal);
+                            break;
+                        }
+                    }
+                    if (!esVarLocal) {
+                        strncpy(nombreReal, nombreVar, sizeof(nombreReal) - 1);
+                        printf("[DEBUG OP] Variable '%s' es global\n", nombreVar);
+                    }
+                    
+                    // Generar código optimizado para parámetros
+                    if (strcmp(operacionNodo->valor, "+") == 0) {
+                        snprintf(buffer, sizeof(buffer),
+                            "    ldr w1, [sp, #%d]  // cargar '%s'\n"
+                            "    ldr w2, [sp, #%d]  // cargar '%s'\n"
+                            "    add w0, w1, w2\n"
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n",
+                            offsetIzq, izq->valor, offsetDer, der->valor, nombreReal);
+                    } else if (strcmp(operacionNodo->valor, "-") == 0) {
+                        snprintf(buffer, sizeof(buffer),
+                            "    ldr w1, [sp, #%d]  // cargar '%s'\n"
+                            "    ldr w2, [sp, #%d]  // cargar '%s'\n"
+                            "    sub w0, w1, w2\n"
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n",
+                            offsetIzq, izq->valor, offsetDer, der->valor, nombreReal);
+                    } else if (strcmp(operacionNodo->valor, "*") == 0) {
+                        snprintf(buffer, sizeof(buffer),
+                            "    ldr w1, [sp, #%d]  // cargar '%s'\n"
+                            "    ldr w2, [sp, #%d]  // cargar '%s'\n"
+                            "    mul w0, w1, w2\n"
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n",
+                            offsetIzq, izq->valor, offsetDer, der->valor, nombreReal);
+                    } else if (strcmp(operacionNodo->valor, "/") == 0) {
+                        snprintf(buffer, sizeof(buffer),
+                            "    ldr w1, [sp, #%d]  // cargar '%s'\n"
+                            "    ldr w2, [sp, #%d]  // cargar '%s'\n"
+                            "    sdiv w0, w1, w2\n"
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n",
+                            offsetIzq, izq->valor, offsetDer, der->valor, nombreReal);
+                    } else {
+                        printf("[WARNING] Operador '%s' no soportado en optimización de parámetros\n", 
+                               operacionNodo->valor);
+                        goto usar_recursivo; // Saltar a código recursivo
+                    }
+                    
+                    strcat(codigoOperacion, buffer);
+                    insertarEnSeccionText(gen, codigoOperacion);
+                    printf("[DEBUG OP] Código optimizado generado:\n%s\n", codigoOperacion);
+                    return; // ✅ SALIR AQUÍ
+                }
+            }
+        }
+    }
+
+usar_recursivo:
+    printf("[DEBUG OP] Usando generación recursiva para '%s'\n", nombreVar);
+    
     // **DETECTAR SI ES OPERACIÓN COMPUESTA**
     bool esOperacionCompuesta = esOperacionCompleja(operacionNodo);
+    printf("[DEBUG OP] esOperacionCompuesta=%d\n", esOperacionCompuesta);
 
     if (esOperacionCompuesta) {
         // **USAR FUNCIONES RECURSIVAS**
@@ -1227,19 +2078,14 @@ void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombre
         NodoAST* izq = operacionNodo->hijos[0];
         NodoAST* der = operacionNodo->hijos[1];
 
-        // Determinar registros según el tipo
         const char* regIzq = (tipoVar == TIPO_FLOAT) ? "s0" : (tipoVar == TIPO_DOUBLE) ? "d0" : "w0";
         const char* regDer = (tipoVar == TIPO_FLOAT) ? "s1" : (tipoVar == TIPO_DOUBLE) ? "d1" : "w1";
         const char* regRes = (tipoVar == TIPO_FLOAT) ? "s0" : (tipoVar == TIPO_DOUBLE) ? "d0" : "w0";
 
-        // Cargar operandos con conversiones automáticas
         cargarOperandoGeneral(izq, regIzq, tipoVar, gen, codigoOperacion);
         cargarOperandoGeneral(der, regDer, tipoVar, gen, codigoOperacion);
-
-        // Generar operación
         generarOperacionGeneral(operacionNodo->valor, regRes, regIzq, regDer, tipoVar, codigoOperacion);
 
-        // Guardar resultado
         const char* instruccionStore = (tipoVar == TIPO_FLOAT) ? "str s0" : 
                                     (tipoVar == TIPO_DOUBLE) ? "str d0" : 
                                     (tipoVar == TIPO_CHAR) ? "strb w0" : 
@@ -1248,5 +2094,6 @@ void generarCodigoOperacionARM64(GeneradorDeclaraciones* gen, const char* nombre
         strcat(codigoOperacion, buffer);
     }
 
+    printf("[DEBUG OP] Código generado para '%s':\n%s\n", nombreVar, codigoOperacion);
     insertarEnSeccionText(gen, codigoOperacion);
 }

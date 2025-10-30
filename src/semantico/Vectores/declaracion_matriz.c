@@ -137,7 +137,7 @@ int verificarDeclaracionMatriz(NodoAST* nodo) {
         int numFilas = listaFilas->num_hijos;
         int numColumnas = -1;
         
-        printf("[DEBUG] Procesando %d filas\n", numFilas);
+        //printf("[DEBUG] Procesando %d filas\n", numFilas);
         
         // Matriz para almacenar los valores
         char*** valores_matriz = malloc(numFilas * sizeof(char**));
@@ -156,7 +156,7 @@ int verificarDeclaracionMatriz(NodoAST* nodo) {
             }
             
             int columnas = elementosFila->num_hijos;
-            printf("[DEBUG] Fila %d tiene %d elementos\n", i, columnas);
+            //printf("[DEBUG] Fila %d tiene %d elementos\n", i, columnas);
             
             if (numColumnas == -1) {
                 numColumnas = columnas;
@@ -425,7 +425,7 @@ int verificarDeclaracionMatriz(NodoAST* nodo) {
                     valores_matriz[i][j] = strdup(buffer);
                 }
                 
-                printf("[DEBUG] Elemento [%d][%d] = %s\n", i, j, valores_matriz[i][j]);
+                //printf("[DEBUG] Elemento [%d][%d] = %s\n", i, j, valores_matriz[i][j]);
             }
         }
         

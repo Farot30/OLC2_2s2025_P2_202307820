@@ -13,6 +13,10 @@ typedef struct {
     AdministradorRegistros* admin_registros;
     bool temp_str_valueof_bss_insertado;
     int contador_literales_string;
+    bool dentro_de_funcion;              // Flag: ¿estamos generando código dentro de una función?
+    char nombre_funcion_actual[128]; 
+    char buffer_funcion[16384];
+    size_t buffer_funcion_len;
 } GeneradorDeclaraciones;
 
 // Funciones para generar declaraciones ARM64

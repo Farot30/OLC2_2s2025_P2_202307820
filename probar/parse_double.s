@@ -1,103 +1,95 @@
-// Implementación de parse_double en ARM64 puro
-// Convierte un string a double
-// Entrada: x0 = puntero al string
-// Salida: d0 = valor double
-
+// Versión SIMPLIFICADA de parse_double
 .global parse_double
 .text
 
 parse_double:
-    // Guardar registros
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     
-    // Inicializar variables
+    // Inicializar
     fmov d0, xzr            // resultado = 0.0
-    fmov d1, xzr            // parte_decimal = 0.0
-    mov w1, #0              // signo = 0 (positivo)
-    mov w2, #0              // encontro_punto = 0
-    mov w3, #0              // divisor_decimal = 1
-    mov x4, x0              // puntero al string
+    mov w1, #0              // signo = positivo
+    mov w2, #0              // decimales = false
+    mov w3, #1              // divisor = 1
+    mov x4, x0              // ptr
     
-    // Saltar espacios en blanco
-skip_spaces_d:
+    // Saltar espacios
+skip_spaces:
     ldrb w5, [x4]
-    cmp w5, #32             // ' '
-    beq next_char_space_d
-    cmp w5, #9              // '\t'
-    bne check_sign_d
-next_char_space_d:
+    cbz w5, end_parse
+    cmp w5, #32
+    beq next_space
+    cmp w5, #9
+    bne check_sign
+next_space:
     add x4, x4, #1
-    b skip_spaces_d
+    b skip_spaces
     
-check_sign_d:
+check_sign:
     ldrb w5, [x4]
-    cmp w5, #45             // '-'
-    bne check_plus_d
-    mov w1, #1              // signo = negativo
+    cbz w5, end_parse
+    cmp w5, #45
+    bne check_plus
+    mov w1, #1
     add x4, x4, #1
-    b parse_loop_d
-    
-check_plus_d:
-    cmp w5, #43             // '+'
-    bne parse_loop_d
+    b main_loop
+check_plus:
+    cmp w5, #43
+    bne main_loop
     add x4, x4, #1
     
-parse_loop_d:
+main_loop:
     ldrb w5, [x4]
+    cbz w5, end_parse
     
-    // Verificar si es punto decimal
-    cmp w5, #46             // '.'
-    bne check_digit_d
-    mov w2, #1              // encontro_punto = true
+    cmp w5, #46
+    bne check_digit
+    mov w2, #1
     add x4, x4, #1
-    b parse_loop_d
+    b main_loop
     
-check_digit_d:
-    // Verificar si es dígito
-    cmp w5, #48             // '0'
-    blt end_parse_d
-    cmp w5, #57             // '9'
-    bgt end_parse_d
+check_digit:
+    cmp w5, #48
+    blt end_parse
+    cmp w5, #57
+    bgt end_parse
     
-    // Convertir carácter a dígito
-    sub w5, w5, #48
-    scvtf d2, w5            // Convertir a double
+    sub w6, w5, #48
+    scvtf d2, w6
     
-    // Si no hemos encontrado punto, procesar parte entera
     cmp w2, #0
-    bne process_decimal_d
+    bne decimal_part
     
-    // Parte entera: resultado = resultado * 10 + digito
+    // Entera
     fmov d3, #10.0
     fmul d0, d0, d3
     fadd d0, d0, d2
-    b next_char_d
+    b next_digit
     
-process_decimal_d:
-    // Parte decimal
-    mov w6, #10
-    mul w3, w3, w6          // divisor_decimal *= 10
-    scvtf d3, w3            // Convertir divisor a double
-    fdiv d2, d2, d3         // digito / divisor
-    fadd d1, d1, d2         // parte_decimal += digito/divisor
+decimal_part:
+    // Decimal: acumular y luego dividir al final
+    fmov d3, #10.0
+    fmul d0, d0, d3
+    fadd d0, d0, d2
+    mov w7, #10
+    mul w3, w3, w7
     
-next_char_d:
+next_digit:
     add x4, x4, #1
-    b parse_loop_d
+    b main_loop
     
-end_parse_d:
-    // Combinar parte entera y decimal
-    fadd d0, d0, d1
+end_parse:
+    // Ajustar parte decimal
+    cmp w2, #1
+    bne apply_sign
+    scvtf d3, w3
+    fdiv d0, d0, d3
     
-    // Aplicar signo si es negativo
+apply_sign:
     cmp w1, #1
-    bne return_result_d
+    bne done
     fneg d0, d0
     
-return_result_d:
-    // Resultado ya está en d0
-    
-    // Restaurar registros y retornar
+done:
     ldp x29, x30, [sp], #16
     ret

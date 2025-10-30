@@ -6,6 +6,7 @@
 #include "InstruccionesNorm_arm64/declaraciones_arm64.h"
 #include "InstruccionesNorm_arm64/declaracionConst_arm64.h"
 #include <stdio.h>
+#include "Funciones/FuncionesVoid_arm64.h"
 
 // Estructura principal del generador ARM64
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
     bool seccion_text_iniciada;
     bool seccion_bss_creada;
     bool seccion_rodata_creada;
+    PilaAmbitos pila_ambitos;
 } GeneradorARM64;
 
 // Funciones principales
@@ -27,6 +29,7 @@ void finalizarArchivoARM64();
 void GeneradorCodigoARM64(NodoAST* nodo);
 const char* obtenerCodigoGenerado();
 
+void insertarFuncionAntesDeStart(GeneradorDeclaraciones* gen, const char* codigo);
 // Funciones del generador mejorado
 void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo);
 void finalizarGeneradorARM64(GeneradorARM64* gen);

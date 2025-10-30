@@ -4,6 +4,18 @@
 #include <string.h>
 #include <stdlib.h>
 
+const char* obtenerNombreTipo(TipoDato tipo) {
+    switch (tipo) {
+        case TIPO_INT: return "int";
+        case TIPO_DOUBLE: return "double";
+        case TIPO_FLOAT: return "float";
+        case TIPO_CHAR: return "char";
+        case TIPO_BOOLEAN: return "boolean";
+        case TIPO_STRING: return "String";
+        default: return "desconocido";
+    }
+}
+
 TipoDato obtenerTipoDesdeString(const char* str) {
     if (!str) return TIPO_DESCONOCIDO;
     
@@ -217,17 +229,17 @@ TipoDato deducirTipoExprARM64(NodoAST* expr, NodoAST* raizAST) {
         case AST_IDENTIFICADOR: {
             TipoDato tipoDeducido = buscarTipoIdentificadorAST(expr->valor, raizAST);
             if (tipoDeducido != TIPO_DESCONOCIDO) {
-                printf("[DEBUG TIPO] Identificador: %s, tipo deducido (AST): %d\n", expr->valor, tipoDeducido);
+                //printf("[DEBUG TIPO] Identificador: %s, tipo deducido (AST): %d\n", expr->valor, tipoDeducido);
                 return tipoDeducido;
             }
             
             // Buscar en la tabla de símbolos (variables y constantes)
             Simbolo* sim = buscarSimbolo(expr->valor);
             if (sim) {
-                printf("[DEBUG TIPO] Identificador: %s, tipo deducido (tabla): %d\n", expr->valor, sim->tipo);
+                //printf("[DEBUG TIPO] Identificador: %s, tipo deducido (tabla): %d\n", expr->valor, sim->tipo);
                 return sim->tipo;
             }
-            printf("[DEBUG TIPO] Identificador: %s, tipo deducido: %d\n", expr->valor, TIPO_DESCONOCIDO);
+            //printf("[DEBUG TIPO] Identificador: %s, tipo deducido: %d\n", expr->valor, TIPO_DESCONOCIDO);
             return TIPO_DESCONOCIDO;
         }
         case AST_OPERACION: {

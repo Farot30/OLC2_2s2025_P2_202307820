@@ -4,6 +4,7 @@
 #include "EscapeSecuencia_arm64.h" 
 #include "Embebidas/EvaluadorExpr_arm64.h"
 #include "Vectores_arm64/AccesoVector_arm64.h"
+#include "Vectores_arm64/AccesoMatriz_arm64.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -87,8 +88,15 @@ static void insertarConstantesBooleanas(GeneradorDeclaraciones* gen) {
         insertarEnSeccionBss(gen, "temp_str_valueof: .skip 32\n");
         gen->temp_str_valueof_bss_insertado = true;
     }
+    
+    // ✅ AGREGAR str_true Y str_false EN .data
+    if (!strstr(gen->buffer, "str_true:")) {
+        insertarEnSeccionData(gen, "str_true: .asciz \"true\"\n");
+    }
+    if (!strstr(gen->buffer, "str_false:")) {
+        insertarEnSeccionData(gen, "str_false: .asciz \"false\"\n");
+    }
 }
-
 
 // En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
 static bool esConcatenacionConStringValof(NodoAST* nodo) {
@@ -138,6 +146,172 @@ int getVectorSize(NodoAST* raiz, const char* nombre) {
     return 0;
 }
 
+static void generarImpresionMatrizCompleta(GeneradorDeclaraciones* gen, const char* nombreMatriz, 
+                                          TipoDato tipoBase, int filas, int columnas) {
+    char codigo[2048] = "";
+    char buffer[256];
+    
+    // Crear formatos necesarios
+    snprintf(buffer, sizeof(buffer), "format_mat_open: .asciz \"[\\n\"\n");
+    insertarEnSeccionData(gen, buffer);
+    snprintf(buffer, sizeof(buffer), "format_mat_close: .asciz \"]\\n\"\n");
+    insertarEnSeccionData(gen, buffer);
+    snprintf(buffer, sizeof(buffer), "format_mat_row_open: .asciz \"  [\"\n");
+    insertarEnSeccionData(gen, buffer);
+    snprintf(buffer, sizeof(buffer), "format_mat_row_close: .asciz \"]\\n\"\n");
+    insertarEnSeccionData(gen, buffer);
+    snprintf(buffer, sizeof(buffer), "format_mat_sep: .asciz \", \"\n");
+    insertarEnSeccionData(gen, buffer);
+    
+    // Formato según el tipo
+    const char* formatoElem;
+    const char* instrLoad;
+    int tamElem;
+    const char* regType;
+    
+    switch (tipoBase) {
+        case TIPO_INT:
+            formatoElem = "format_mat_int";
+            instrLoad = "ldr w";
+            tamElem = 4;
+            regType = "w";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\"\n", formatoElem);
+            break;
+        case TIPO_FLOAT:
+            formatoElem = "format_mat_float";
+            instrLoad = "ldr s";
+            tamElem = 4;
+            regType = "s";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\"\n", formatoElem);
+            break;
+        case TIPO_DOUBLE:
+            formatoElem = "format_mat_double";
+            instrLoad = "ldr d";
+            tamElem = 8;
+            regType = "d";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\"\n", formatoElem);
+            break;
+        case TIPO_CHAR:
+            formatoElem = "format_mat_char";
+            instrLoad = "ldrb w";
+            tamElem = 1;
+            regType = "w";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\"\n", formatoElem);
+            break;
+        case TIPO_STRING:
+            formatoElem = "format_mat_str";
+            instrLoad = "ldr x";
+            tamElem = 8;
+            regType = "x";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\"\n", formatoElem);
+            break;
+        default:
+            formatoElem = "format_mat_int";
+            instrLoad = "ldr w";
+            tamElem = 4;
+            regType = "w";
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\"\n", formatoElem);
+    }
+    insertarEnSeccionData(gen, buffer);
+    
+    // 1. Imprimir apertura "[\n"
+    snprintf(buffer, sizeof(buffer),
+        "    ldr x0, =format_mat_open\n"
+        "    bl printf\n");
+    strcat(codigo, buffer);
+    
+    // 2. Variables: tamaño matriz, contador fila, contador columna
+    snprintf(buffer, sizeof(buffer),
+        "    mov w19, #%d\n"        // Total filas
+        "    mov w20, #%d\n"        // Total columnas
+        "    mov w21, #0\n"         // Contador fila
+        "    ldr x22, =%s\n",       // Base de la matriz
+        filas, columnas, nombreMatriz);
+    strcat(codigo, buffer);
+    
+    // 3. Loop de filas
+    snprintf(buffer, sizeof(buffer),
+        "print_mat_row_loop_%s:\n"
+        "    cmp w21, w19\n"
+        "    bge print_mat_end_%s\n"
+        "    ldr x0, =format_mat_row_open\n"
+        "    bl printf\n"
+        "    mov w23, #0\n",        // Contador columna
+        nombreMatriz, nombreMatriz);
+    strcat(codigo, buffer);
+    
+    // 4. Loop de columnas
+    snprintf(buffer, sizeof(buffer),
+        "print_mat_col_loop_%s:\n"
+        "    cmp w23, w20\n"
+        "    bge print_mat_row_end_%s\n",
+        nombreMatriz, nombreMatriz);
+    strcat(codigo, buffer);
+    
+    // 5. Calcular offset: (fila * columnas + columna) * tamElem
+    snprintf(buffer, sizeof(buffer),
+        "    mul w24, w21, w20\n"   // fila * columnas
+        "    add w24, w24, w23\n"   // + columna
+        "    mov w25, #%d\n"        // tamaño elemento
+        "    mul w24, w24, w25\n"   // offset total
+        "    add x26, x22, w24, sxtw\n", // dirección elemento
+        tamElem);
+    strcat(codigo, buffer);
+    
+    // 6. Cargar e imprimir elemento
+    if (tipoBase == TIPO_FLOAT) {
+        snprintf(buffer, sizeof(buffer),
+            "    %s1, [x26]\n"
+            "    fcvt d1, s1\n"      // Convertir float a double para printf
+            "    ldr x0, =%s\n"
+            "    bl printf\n",
+            instrLoad, formatoElem);
+    } else if (tipoBase == TIPO_DOUBLE) {
+        snprintf(buffer, sizeof(buffer),
+            "    %s1, [x26]\n"
+            "    ldr x0, =%s\n"
+            "    bl printf\n",
+            instrLoad, formatoElem);
+    } else {
+        snprintf(buffer, sizeof(buffer),
+            "    %s1, [x26]\n"
+            "    ldr x0, =%s\n"
+            "    bl printf\n",
+            instrLoad, formatoElem);
+    }
+    strcat(codigo, buffer);
+    
+    // 7. Separador entre elementos (si no es el último)
+    snprintf(buffer, sizeof(buffer),
+        "    add w23, w23, #1\n"
+        "    cmp w23, w20\n"
+        "    bge print_mat_col_loop_%s\n"
+        "    ldr x0, =format_mat_sep\n"
+        "    bl printf\n"
+        "    b print_mat_col_loop_%s\n",
+        nombreMatriz, nombreMatriz);
+    strcat(codigo, buffer);
+    
+    // 8. Cerrar fila
+    snprintf(buffer, sizeof(buffer),
+        "print_mat_row_end_%s:\n"
+        "    ldr x0, =format_mat_row_close\n"
+        "    bl printf\n"
+        "    add w21, w21, #1\n"
+        "    b print_mat_row_loop_%s\n",
+        nombreMatriz, nombreMatriz);
+    strcat(codigo, buffer);
+    
+    // 9. Cerrar matriz
+    snprintf(buffer, sizeof(buffer),
+        "print_mat_end_%s:\n"
+        "    ldr x0, =format_mat_close\n"
+        "    bl printf\n",
+        nombreMatriz);
+    strcat(codigo, buffer);
+    
+    insertarEnSeccionText(gen, codigo);
+}
 // En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
 static bool generarConcatenacionOptimizada(GeneradorDeclaraciones* gen, NodoAST* valorNodo, char* codigo) {
     // Recolectar todas las partes usando evaluador recursivo
@@ -221,222 +395,430 @@ static void recolectarPartesRecursivas(NodoAST* nodo, ParteConcatenacion* partes
     }
 }
 
-// En Impresion_arm64.c - AGREGAR ESTA FUNCIÓN
 static bool procesarParteParaFormato(GeneradorDeclaraciones* gen, ParteConcatenacion* parte, 
                                    char* formato, char* codigoArgs, int* regIndex) {
     NodoAST* nodo = parte->nodo;
     TipoDato tipo = parte->tipo;
     char buffer[256];
-    printf("[DEBUG] procesarParteParaFormato: nodo tipo=%d, valor=%s, tipo deducido=%d\n",
-       nodo->tipo, nodo->valor ? nodo->valor : "(null)", tipo);
+    
+    // Contar argumentos ya procesados en el formato
+    int numArgs = 0;
+    for (int i = 0; formato[i]; i++) {
+        if (formato[i] == '%' && formato[i+1] != '%' && 
+            (formato[i+1] == 'd' || formato[i+1] == 's' || formato[i+1] == 'f' || formato[i+1] == 'c')) {
+            numArgs++;
+        }
+    }
+    int regArg = numArgs + 1; // x1 para el primer argumento, x2 para el segundo, etc.
 
+    printf("[DEBUG procesarParteParaFormato] nodo tipo=%d, valor=%s, tipo=%d, regArg=%d, numArgs=%d\n",
+           nodo->tipo, nodo->valor ? nodo->valor : "(null)", tipo, regArg, numArgs);
 
-    // 1. STRING LITERAL
+    // 1. STRING LITERAL - No consume registros
     if (tipo == TIPO_STRING && nodo->tipo == AST_CADENA) {
         strcat(formato, nodo->valor);
         return true;
     }
 
+    // 2. OPERADORES LÓGICOS
     if (nodo->tipo == AST_OPERACION && strcmp(nodo->valor, "!") == 0) {
-        // Es una negación booleana
-        strcat(formato, "%d"); // O "%s" si quieres "true"/"false"
+        strcat(formato, "%d");
         ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo, regIndex);
         strcat(codigoArgs, resultado.codigo);
-        snprintf(buffer, sizeof(buffer), "    mov w1, %s\n", resultado.resultado);
+        snprintf(buffer, sizeof(buffer), 
+            "    mov w3, %s\n"
+            "    mov w%d, w3\n", 
+            resultado.resultado, regArg);
         strcat(codigoArgs, buffer);
         return true;
     }
     
-    // 2. STRING.VALUEOF(EXPR)
+    // 3. STRING.VALUEOF
     if (nodo->tipo == AST_VALUEOF && nodo->num_hijos == 1) {
-        // Evaluar expresión recursivamente
-        ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
-        strcat(codigoArgs, resultado.codigo);
+        TipoDato tipoInterno = deducirTipoExprARM64(nodo->hijos[0], astGlobal);
         
-        if (tipo == TIPO_INT) {
+        if (tipoInterno == TIPO_INT) {
             strcat(formato, "%d");
-            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex,resultado.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-        } else if (tipo == TIPO_DOUBLE) {
-            strcat(formato, "%f");
-            snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", *regIndex - 1);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-        } else if( tipo == TIPO_FLOAT) {
-            strcat(formato, "%f");
-                // Cargar el valor float en sN y convertir a double si printf lo requiere
+            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
                 snprintf(buffer, sizeof(buffer),
-                    "    fcvt d%d, s%d\n", // Convierte float a double para printf
-                    *regIndex - 2 ,*regIndex - 2);
-                strcat(codigoArgs, buffer);
-                printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-                return true;
-
-        } if (tipo == TIPO_CHAR) {
-            strcat(formato, "%c");
-            // Si el nodo es AST_VALUEOF, usar el resultado del hijo
-            if (nodo->tipo == AST_VALUEOF && nodo->num_hijos == 1) {
+                    "    ldr x3, =%s\n"
+                    "    ldr w3, [x3]\n"
+                    "    mov w%d, w3\n",
+                    nodo->hijos[0]->valor, regArg);
+            } else if (nodo->hijos[0]->tipo == AST_NUMERO) {
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w%d, #%s\n",
+                    regArg, nodo->hijos[0]->valor);
+            } else {
                 ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
                 strcat(codigoArgs, resultado.codigo);
-                // Mueve el valor al registro de argumento
-                snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resultado.resultado);
-                strcat(codigoArgs, buffer);
-                (*regIndex)++;
-                return true;
-            } else if (nodo->tipo == AST_IDENTIFICADOR) {
                 snprintf(buffer, sizeof(buffer),
-                    "    ldr x%d, =%s\n"
-                    "    ldrb w%d, [x%d]\n",
-                    *regIndex, nodo->valor, *regIndex, *regIndex);
-                strcat(codigoArgs, buffer);
-                (*regIndex)++;
-                return true;
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n",
+                    resultado.resultado, regArg);
             }
-        } 
-        else if( tipo == TIPO_BOOLEAN) {
+            strcat(codigoArgs, buffer);
+            return true;
+        } if (tipoInterno == TIPO_DOUBLE) {
+            strcat(formato, "%f");
+            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                // ✅ CORRECCIÓN: Usar d0 para el primer double, d1 para el segundo
+                int regDouble = (numArgs == 0) ? 0 : 1; // d0 si es el primero, d1 si es el segundo
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr d3, [x3]\n"
+                    "    fmov d%d, d3\n",
+                    nodo->hijos[0]->valor, regDouble);
+            } else {
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
+                strcat(codigoArgs, resultado.codigo);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regDouble);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        } if (tipoInterno == TIPO_FLOAT) {
+            strcat(formato, "%f");
+            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                // ✅ CORRECCIÓN: Convertir a double y usar d0/d1
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr s3, [x3]\n"
+                    "    fcvt d%d, s3\n",
+                    nodo->hijos[0]->valor, regDouble);
+            } else {
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
+                strcat(codigoArgs, resultado.codigo);
+                snprintf(buffer, sizeof(buffer), "    fcvt d%d, s0\n", regDouble);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        } else if (tipoInterno == TIPO_CHAR) {
+            strcat(formato, "%c");
+            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldrb w3, [x3]\n"
+                    "    mov w%d, w3\n",
+                    nodo->hijos[0]->valor, regArg);
+            } else {
+                snprintf(buffer, sizeof(buffer), "    mov w%d, #%s\n", regArg, nodo->hijos[0]->valor);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        } else if (tipoInterno == TIPO_BOOLEAN) {
             insertarConstantesBooleanas(gen);
             strcat(formato, "%s");
-            snprintf(buffer, sizeof(buffer),
-                "    mov w0, %s\n"
-                "    ldr x1, =temp_str_valueof\n"
-                "    bl valueOf_bool\n"
-                "    ldr x1, =temp_str_valueof\n",
-                resultado.resultado);
-        } else if (tipo == TIPO_STRING) {
-            strcat(formato, "%s");
-            snprintf(buffer, sizeof(buffer), "    mov x%d, %s\n", *regIndex - 1, resultado.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-        } else {
-            printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return false; // Tipo no soportado para String.valueOf
-        }
-        strcat(codigoArgs, buffer);
-        printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-        return true;
-    }
-
-    if (nodo->tipo == AST_ACCESO) {
-        printf("[DEBUG CONCAT] Procesando acceso a vector\n");
-        
-        // Generar acceso al vector
-        ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
-        strcat(codigoArgs, resAcceso.codigo);
-        
-        // Agregar formato según el tipo
-        if (tipo == TIPO_INT || tipo == 6) {
-            strcat(formato, "%d");
-            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex - 2, resAcceso.resultado);
-            strcat(codigoArgs, buffer);
-            (*regIndex)++;
-        } else if (tipo == TIPO_FLOAT || tipo == TIPO_DOUBLE) {
-            strcat(formato, "%f");
-            if (tipo == TIPO_FLOAT) {
-                snprintf(buffer, sizeof(buffer), "    fcvt d%d, %s\n", *regIndex - 1, resAcceso.resultado);
-                strcat(codigoArgs, buffer);
-            }
-            (*regIndex)++;
-        } else if (tipo == TIPO_CHAR) {
-            strcat(formato, "%c");
-            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resAcceso.resultado);
-            strcat(codigoArgs, buffer);
-            (*regIndex)++;
-        } else if (tipo == TIPO_STRING) {
-            strcat(formato, "%s");
-            snprintf(buffer, sizeof(buffer), "    mov x%d, %s\n", *regIndex, resAcceso.resultado);
-            strcat(codigoArgs, buffer);
-            (*regIndex)++;
-        } else if (tipo == TIPO_BOOLEAN) {
-            strcat(formato, "%d");
-            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex, resAcceso.resultado);
-            strcat(codigoArgs, buffer);
-            (*regIndex)++;
-        }
-        
-        printf("[DEPURACION] Parte soportada (acceso vector): tipo=%d\n", tipo);
-        return true;
-    }
-    
-    // 3. OTROS TIPOS (int, float, string variables, etc.)
-    switch (tipo) {
-        case TIPO_INT:
-            strcat(formato, "%d");
-            // Usar generarExprEmbebidaARM64 para cualquier expresión int
-            ResultadoExprEmbebida resInt = generarExprEmbebidaARM64(gen, nodo, regIndex);
-            strcat(codigoArgs, resInt.codigo);
-            snprintf(buffer, sizeof(buffer), "    mov w%d, %s\n", *regIndex - 1, resInt.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-            
-        case TIPO_FLOAT:
-            strcat(formato, "%f");
-            ResultadoExprEmbebida resFloat = generarExprEmbebidaARM64(gen, nodo, regIndex);
-            strcat(codigoArgs, resFloat.codigo);
-            snprintf(buffer, sizeof(buffer), "    fmov d%d, %s\n", *regIndex - 1, resFloat.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-        
-        case TIPO_DOUBLE:
-            strcat(formato, "%f");
-            ResultadoExprEmbebida resDouble = generarExprEmbebidaARM64(gen, nodo, regIndex);
-            strcat(codigoArgs, resDouble.codigo);
-            snprintf(buffer, sizeof(buffer), "    fmov s%d, %s\n", *regIndex - 1, resDouble.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-        case TIPO_CHAR:
-            strcat(formato, "%c");
-            ResultadoExprEmbebida resChar = generarExprEmbebidaARM64(gen, nodo, regIndex);
-            strcat(codigoArgs, resChar.codigo);
-
-            // Si el resultado es un registro (ejemplo: resChar.resultado == "w1")
-            snprintf(buffer, sizeof(buffer),
-                "    mov w1, %s\n", resChar.resultado);
-            strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return true;
-            
-        case TIPO_STRING:
-            if (nodo->tipo == AST_IDENTIFICADOR || nodo->tipo == AST_CADENA) {
-                strcat(formato, "%s");
-               ResultadoExprEmbebida resStr = generarExprEmbebidaARM64(gen, nodo, regIndex);
-                strcat(codigoArgs, resStr.codigo);
-                // Solo agrega el bloque de carga si resStr.codigo está vacío (es decir, si no se generó ya)
-                if (resStr.codigo[0] == '\0') {
-                    snprintf(buffer, sizeof(buffer),
-                        "    ldr x1, =%s\n"
-                        "    ldr x1, [x1]\n",
-                        resStr.resultado);
-                    strcat(codigoArgs, buffer);
-                }
-                printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-                return true;
-            }
-            printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return false;
-        case TIPO_BOOLEAN:
-            insertarConstantesBooleanas(gen);
-            strcat(formato, "%d");
-            ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
             strcat(codigoArgs, resultado.codigo);
             snprintf(buffer, sizeof(buffer),
                 "    mov w0, %s\n"
                 "    ldr x1, =temp_str_valueof\n"
                 "    bl valueOf_bool\n"
-                "    ldr x1, =temp_str_valueof\n",
-                resultado.resultado);
+                "    mov x3, x0\n"
+                "    mov x%d, x3\n",
+                resultado.resultado, regArg);
             strcat(codigoArgs, buffer);
-            printf("[DEPURACION] Parte soportada: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
             return true;
+        } else if (tipoInterno == TIPO_STRING) {
+            strcat(formato, "%s");
+            if (nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr x3, [x3]\n"
+                    "    mov x%d, x3\n",
+                    nodo->hijos[0]->valor, regArg);
+            } else {
+                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, nodo->hijos[0], regIndex);
+                strcat(codigoArgs, resultado.codigo);
+                snprintf(buffer, sizeof(buffer), "    mov x%d, %s\n", regArg, resultado.resultado);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        }
+        return false;
+    }
+
+    // 4. ACCESO A VECTOR/MATRIZ
+    if (nodo->tipo == AST_ACCESO) {
+        int numDimensiones = contarDimensionesAcceso(nodo);
+        
+        if (numDimensiones == 2) {
+            // Acceso a matriz
+            const char* nombreMatriz = nodo->hijos[0]->valor;
+            NodoAST* matrizDecl = buscarDeclaracionPorIdentificador(astGlobal, AST_DECLARACION_MATRIZ, nombreMatriz);
+            if (!matrizDecl) return false;
+            
+            TipoDato tipoMatriz = obtenerTipoMatrizDesdeAST(matrizDecl);
+            ResultadoExprEmbebida resAcceso = generarAccesoMatrizARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resAcceso.codigo);
+            
+            if (tipoMatriz == TIPO_INT) {
+                strcat(formato, "%d");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipoMatriz == TIPO_FLOAT) {
+                strcat(formato, "%f");
+                snprintf(buffer, sizeof(buffer), 
+                    "    fcvt d3, %s\n"
+                    "    fmov d%d, d3\n", 
+                    resAcceso.resultado, regArg - 1);
+            } else if (tipoMatriz == TIPO_DOUBLE) {
+                strcat(formato, "%f");
+                snprintf(buffer, sizeof(buffer), 
+                    "    fmov d3, %s\n"
+                    "    fmov d%d, d3\n", 
+                    resAcceso.resultado, regArg - 1);
+            } else if (tipoMatriz == TIPO_CHAR) {
+                strcat(formato, "%c");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipoMatriz == TIPO_STRING) {
+                strcat(formato, "%s");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov x3, %s\n"
+                    "    mov x%d, x3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipoMatriz == TIPO_BOOLEAN) {
+                strcat(formato, "%s");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w0, %s\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    bl valueOf_bool\n"
+                    "    mov x3, x0\n"
+                    "    mov x%d, x3\n",
+                    resAcceso.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        } else if (numDimensiones == 1) {
+            // Acceso a vector
+            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, nodo, regIndex);
+            strcat(codigoArgs, resAcceso.codigo);
+            
+            if (tipo == TIPO_INT) {
+                strcat(formato, "%d");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipo == TIPO_CHAR) {
+                strcat(formato, "%c");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipo == TIPO_STRING) {
+                strcat(formato, "%s");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov x3, %s\n"
+                    "    mov x%d, x3\n", 
+                    resAcceso.resultado, regArg);
+            } else if (tipo == TIPO_FLOAT) {
+                strcat(formato, "%f");
+                snprintf(buffer, sizeof(buffer), 
+                    "    fcvt d3, %s\n"
+                    "    fmov d%d, d3\n", 
+                    resAcceso.resultado, regArg - 1);
+            } else if (tipo == TIPO_DOUBLE) {
+                strcat(formato, "%f");
+                snprintf(buffer, sizeof(buffer), 
+                    "    fmov d3, %s\n"
+                    "    fmov d%d, d3\n", 
+                    resAcceso.resultado, regArg - 1);
+            } else if (tipo == TIPO_BOOLEAN) {
+                strcat(formato, "%s");
+                snprintf(buffer, sizeof(buffer), 
+                    "    mov w0, %s\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    bl valueOf_bool\n"
+                    "    mov x3, x0\n"
+                    "    mov x%d, x3\n",
+                    resAcceso.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        }
+    }
+
+    // 5. ARRAY.LENGTH
+    if (nodo->tipo == AST_LENGHT) {
+        strcat(formato, "%d");
+        ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoArgs, resLength.codigo);
+        snprintf(buffer, sizeof(buffer), 
+            "    mov w3, %s\n"
+            "    mov w%d, w3\n", 
+            resLength.resultado, regArg);
+        strcat(codigoArgs, buffer);
+        return true;
+    }
+
+    // 6. INDEXOF
+    if (nodo->tipo == AST_INDEXOF) {
+        strcat(formato, "%d");
+        ResultadoExprEmbebida resIndexOf = generarExprEmbebidaARM64(gen, nodo, regIndex);
+        strcat(codigoArgs, resIndexOf.codigo);
+        snprintf(buffer, sizeof(buffer), 
+            "    mov w3, %s\n"
+            "    mov w%d, w3\n", 
+            resIndexOf.resultado, regArg);
+        strcat(codigoArgs, buffer);
+        return true;
+    }
+    
+    // 7. OTROS TIPOS (int, float, double, string, char, boolean)
+    switch (tipo) {
+        case TIPO_INT:
+            strcat(formato, "%d");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr w3, [x3]\n"
+                    "    mov w%d, w3\n",
+                    nodo->valor, regArg);
+            } else if (nodo->tipo == AST_NUMERO) {
+                snprintf(buffer, sizeof(buffer), "    mov w%d, #%s\n", regArg, nodo->valor);
+            } else {
+                ResultadoExprEmbebida resInt = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resInt.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n",
+                    resInt.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+            
+        case TIPO_DOUBLE:
+            strcat(formato, "%f");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                // ✅ CORRECCIÓN: Usar d0 para el primer double, d1 para el segundo
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr d3, [x3]\n"
+                    "    fmov d%d, d3\n",
+                    nodo->valor, regDouble);
+            } else {
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                ResultadoExprEmbebida resDouble = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resDouble.codigo);
+                snprintf(buffer, sizeof(buffer), "    fmov d%d, d0\n", regDouble);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        case TIPO_FLOAT:
+            strcat(formato, "%f");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                // ✅ CORRECCIÓN: Convertir a double y usar d0/d1
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr s3, [x3]\n"
+                    "    fcvt d%d, s3\n",
+                    nodo->valor, regDouble);
+            } else {
+                int regDouble = (numArgs == 0) ? 0 : 1;
+                ResultadoExprEmbebida resFloat = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resFloat.codigo);
+                snprintf(buffer, sizeof(buffer), "    fcvt d%d, s0\n", regDouble);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+        
+        case TIPO_CHAR:
+            strcat(formato, "%c");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldrb w3, [x3]\n"
+                    "    mov w%d, w3\n",
+                    nodo->valor, regArg);
+            } else if (nodo->tipo == AST_CADENA && nodo->valor && strlen(nodo->valor) > 0) {
+                snprintf(buffer, sizeof(buffer), "    mov w%d, #%d\n", regArg, (int)nodo->valor[0]);
+            } else {
+                ResultadoExprEmbebida resChar = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resChar.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w3, %s\n"
+                    "    mov w%d, w3\n",
+                    resChar.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+            
+        case TIPO_STRING:
+            strcat(formato, "%s");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldr x3, [x3]\n"
+                    "    mov x%d, x3\n",
+                    nodo->valor, regArg);
+            } else if (nodo->tipo == AST_CADENA) {
+                char* cadenaEscapada = limpiarCadenaParaASM(nodo->valor);
+                char nombreConst[64];
+                snprintf(nombreConst, sizeof(nombreConst), "str_concat_%d", gen->admin_registros->contador_constantes++);
+                char bufferData[256];
+                snprintf(bufferData, sizeof(bufferData), "%s: .asciz \"%s\"\n", nombreConst, cadenaEscapada);
+                insertarEnSeccionData(gen, bufferData);
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    mov x%d, x3\n",
+                    nombreConst, regArg);
+                free(cadenaEscapada);
+            } else {
+                ResultadoExprEmbebida resStr = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resStr.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    mov x3, %s\n"
+                    "    mov x%d, x3\n",
+                    resStr.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+            
+        case TIPO_BOOLEAN:
+            insertarConstantesBooleanas(gen);
+            strcat(formato, "%s");
+            if (nodo->tipo == AST_IDENTIFICADOR) {
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    ldrb w0, [x3]\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    bl valueOf_bool\n"
+                    "    mov x3, x0\n"
+                    "    mov x%d, x3\n",
+                    nodo->valor, regArg);
+            } else if (nodo->tipo == AST_BOOLEAN) {
+                const char* strBool = (strcmp(nodo->valor, "true") == 0) ? "str_true" : "str_false";
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x3, =%s\n"
+                    "    mov x%d, x3\n",
+                    strBool, regArg);
+            } else {
+                ResultadoExprEmbebida resBool = generarExprEmbebidaARM64(gen, nodo, regIndex);
+                strcat(codigoArgs, resBool.codigo);
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w0, %s\n"
+                    "    ldr x1, =temp_str_valueof\n"
+                    "    bl valueOf_bool\n"
+                    "    mov x3, x0\n"
+                    "    mov x%d, x3\n",
+                    resBool.resultado, regArg);
+            }
+            strcat(codigoArgs, buffer);
+            return true;
+            
         default:
-        printf("[DEPURACION] Fallback en procesarParteParaFormato: tipo=%d, nodo tipo=%d, valor=%s\n", tipo, nodo->tipo, nodo->valor ? nodo->valor : "(null)");
-            return false; // Tipo no soportado
+            return false;
     }
 }
 
@@ -467,7 +849,25 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
         // Detectar el tipo del valor a imprimir
         TipoDato tipo = deducirTipoExprARM64(valorNodo, astGlobal);
         
-        
+        if (tipo == TIPO_DESCONOCIDO && valorNodo->tipo == AST_IDENTIFICADOR) {
+            // Intentar buscar como matriz
+            NodoAST* matrizDecl = buscarDeclaracionPorIdentificador(astGlobal, AST_DECLARACION_MATRIZ, valorNodo->valor);
+            if (matrizDecl) {
+                printf("[DEBUG IMPRESION] Detectada impresión de matriz completa: '%s'\n", valorNodo->valor);
+                
+                TipoDato tipoBase = obtenerTipoMatrizDesdeAST(matrizDecl);
+                int filas = 0, columnas = 0;
+                obtenerDimensionesMatriz(matrizDecl, &filas, &columnas);
+                
+                if (filas > 0 && columnas > 0) {
+                    generarImpresionMatrizCompleta(gen, valorNodo->valor, tipoBase, filas, columnas);
+                    return;
+                } else {
+                    printf("[ERROR] No se pudieron determinar las dimensiones de la matriz '%s'\n", valorNodo->valor);
+                }
+            }
+        }
+
 
         // **PRIORIDAD 1: Si es concatenación, intentar generar printf optimizado**
         if (valorNodo->tipo == AST_OPERACION && strcmp(valorNodo->valor, "+") == 0) {
@@ -479,65 +879,229 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                 }
             }
         }
-         else if (valorNodo->tipo == AST_ACCESO) {
+        else if (valorNodo->tipo == AST_ACCESO) {
             if (!valorNodo->hijos[0] || !valorNodo->hijos[0]->valor) {
-                printf("[ERROR] Nodo de acceso a vector inválido en impresión\n");
+                printf("[ERROR] Nodo de acceso inválido en impresión\n");
                 return;
             }
-            const char* nombreVector = valorNodo->hijos[0]->valor;
-            NodoAST* vectorDecl = buscarVectorEnAST(nombreVector);
-            if (!vectorDecl) {
-                printf("[ERROR] Vector '%s' no encontrado en AST para impresión\n", nombreVector);
+            
+            // **DETECCIÓN AUTOMÁTICA: Vector o Matriz**
+            int numDimensiones = contarDimensionesAcceso(valorNodo);
+            const char* nombreArray = valorNodo->hijos[0]->valor;
+            
+            if (numDimensiones == 2) {
+                // **ACCESO A MATRIZ**
+                printf("[DEBUG IMPRESION] Acceso a matriz detectado\n");
+                
+                NodoAST* matrizDecl = buscarDeclaracionPorIdentificador(astGlobal, AST_DECLARACION_MATRIZ, nombreArray);
+                if (!matrizDecl) {
+                    printf("[ERROR] Matriz '%s' no encontrada para impresión\n", nombreArray);
+                    return;
+                }
+                
+                TipoDato tipoBase = obtenerTipoMatrizDesdeAST(matrizDecl);
+                ResultadoExprEmbebida resAcceso = generarAccesoMatrizARM64(gen, valorNodo, &(int){1});
+                
+                if (resAcceso.resultado[0] == '\0') {
+                    printf("[ERROR] No se pudo generar el acceso a matriz para impresión\n");
+                    return;
+                }
+                
+                char formatoMat[64];
+                snprintf(formatoMat, sizeof(formatoMat), "format_mat_elem_%d", gen->admin_registros->contador_constantes++);
+                
+                switch (tipoBase) {
+                    case TIPO_INT:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoMat);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoMat);
+                        break;
+                    case TIPO_FLOAT:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoMat);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    fcvt d1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoMat);
+                        break;
+                    case TIPO_DOUBLE:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoMat);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    fmov d1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoMat);
+                        break;
+                    case TIPO_CHAR:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoMat);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoMat);
+                        break;
+                    case TIPO_STRING:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoMat);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov x1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoMat);
+                        break;
+                    default:
+                        snprintf(buffer, sizeof(buffer), "    // Tipo no soportado para impresión de matriz\n");
+                }
+                
+                strcat(codigo, resAcceso.codigo);
+                strcat(codigo, buffer);
+                insertarEnSeccionText(gen, codigo);
                 return;
-            }
-            TipoDato tipoBase = obtenerTipoVectorDesdeAST(vectorDecl);
-            if (tipoBase == TIPO_DESCONOCIDO) {
-                printf("[ERROR] No se pudo deducir el tipo base del vector '%s' para impresión\n", nombreVector);
+                
+            } else if (numDimensiones == 1) {
+                        // **ACCESO A VECTOR**
+                printf("[DEBUG IMPRESION] Acceso a vector detectado\n");
+                
+                NodoAST* vectorDecl = buscarVectorEnAST(nombreArray);
+                if (!vectorDecl) {
+                    printf("[ERROR] Vector '%s' no encontrado en AST para impresión\n", nombreArray);
+                    return;
+                }
+                TipoDato tipoBase = obtenerTipoVectorDesdeAST(vectorDecl);
+                if (tipoBase == TIPO_DESCONOCIDO) {
+                    printf("[ERROR] No se pudo deducir el tipo base del vector '%s' para impresión\n", nombreArray);
+                    return;
+                }
+                
+                // ✅ GENERAR CÓDIGO DE ACCESO
+                int regIndex = 1;
+                ResultadoExprEmbebida resAcceso = generarAccesoVectorARM64(gen, valorNodo, &regIndex);
+                
+                if (resAcceso.resultado[0] == '\0') {
+                    printf("[ERROR] No se pudo generar el acceso a vector para impresión\n");
+                    return;
+                }
+                
+                // ✅ INSERTAR CÓDIGO DE ACCESO
+                strcat(codigo, resAcceso.codigo);
+                
+                // ✅ CREAR FORMATO Y GENERAR IMPRESIÓN
+                char formatoVec[64];
+                snprintf(formatoVec, sizeof(formatoVec), "format_vec_elem_%d", gen->admin_registros->contador_constantes++);
+                
+                switch (tipoBase) {
+                    case TIPO_INT:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_CHAR:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_FLOAT:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    fcvt d1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_DOUBLE:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    fmov d1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_STRING:
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov x1, %s\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    case TIPO_BOOLEAN:
+                    insertarConstantesBooleanas(gen);
+                        snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoVec);
+                        insertarEnSeccionData(gen, buffer);
+                        snprintf(buffer, sizeof(buffer),
+                            "    mov w0, %s\n"
+                            "    ldr x1, =temp_str_valueof\n"
+                            "    bl valueOf_bool\n"
+                            "    mov x1, x0\n"
+                            "    ldr x0, =%s\n"
+                            "    bl printf\n",
+                            resAcceso.resultado, formatoVec);
+                        strcat(codigo, buffer);
+                        break;
+                    default:
+                        snprintf(buffer, sizeof(buffer), "    // Tipo no soportado para impresión de acceso vector\n");
+                        strcat(codigo, buffer);
+                }
+                insertarEnSeccionText(gen, codigo);
                 return;
+
             }
-            ResultadoExprEmbebida resAcceso = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
-            if (resAcceso.resultado[0] == '\0') {
-                printf("[ERROR] No se pudo generar el acceso a vector para impresión\n");
-                return;
-            }
-            char formatoVec[64];
-            snprintf(formatoVec, sizeof(formatoVec), "format_vec_elem_%d", gen->admin_registros->contador_constantes++);
-            switch (tipoBase) {
-                case TIPO_INT:
-                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoVec);
-                    insertarEnSeccionData(gen, buffer);
-                    snprintf(buffer, sizeof(buffer),
-                        "    mov w1, %s\n"
-                        "    ldr x0, =%s\n"
-                        "    bl printf\n",
-                        resAcceso.resultado, formatoVec);
-                    strcat(codigo, buffer);
-                    break;
-                case TIPO_CHAR:
-                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoVec);
-                    insertarEnSeccionData(gen, buffer);
-                    snprintf(buffer, sizeof(buffer),
-                        "    mov w1, %s\n"
-                        "    ldr x0, =%s\n"
-                        "    bl printf\n",
-                        resAcceso.resultado, formatoVec);
-                    strcat(codigo, buffer);
-                    break;
-                case TIPO_FLOAT:
-                case TIPO_DOUBLE:
-                    snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%f\\n\"\n", formatoVec);
-                    insertarEnSeccionData(gen, buffer);
-                    snprintf(buffer, sizeof(buffer),
-                        "    fmov d1, %s\n"
-                        "    ldr x0, =%s\n"
-                        "    bl printf\n",
-                        resAcceso.resultado, formatoVec);
-                    strcat(codigo, buffer);
-                    break;
-                default:
-                    snprintf(buffer, sizeof(buffer), "    // Tipo no soportado para impresión de acceso vector\n");
-                    strcat(codigo, buffer);
-            }
+        } else if (valorNodo->tipo == AST_LENGHT) {
+            // Imprimir el resultado de .length
+            char formatoLen[64];
+            snprintf(formatoLen, sizeof(formatoLen), "format_len_%d", gen->admin_registros->contador_constantes++);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoLen);
+            insertarEnSeccionData(gen, buffer);
+
+            ResultadoExprEmbebida resLength = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
+            strcat(codigo, resLength.codigo);
+            snprintf(buffer, sizeof(buffer),
+                "    mov w1, %s\n"
+                "    ldr x0, =%s\n"
+                "    bl printf\n",
+                resLength.resultado, formatoLen);
+            strcat(codigo, buffer);
+            insertarEnSeccionText(gen, codigo);
+            return;
+        }
+        else if (valorNodo->tipo == AST_INDEXOF) {
+            // Imprimir el resultado de .indexOf
+            char formatoIdx[64];
+            snprintf(formatoIdx, sizeof(formatoIdx), "format_idx_%d", gen->admin_registros->contador_constantes++);
+            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%d\\n\"\n", formatoIdx);
+            insertarEnSeccionData(gen, buffer);
+
+            ResultadoExprEmbebida resIndexOf = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
+            strcat(codigo, resIndexOf.codigo);
+            snprintf(buffer, sizeof(buffer),
+                "    mov w1, %s\n"
+                "    ldr x0, =%s\n"
+                "    bl printf\n",
+                resIndexOf.resultado, formatoIdx);
+            strcat(codigo, buffer);
             insertarEnSeccionText(gen, codigo);
             return;
         }
@@ -593,12 +1157,23 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
             snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%c\\n\"\n", formatoChar);
             insertarEnSeccionData(gen, buffer);
 
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x1, =%s\n"
-                "    ldrb w1, [x1]\n"
-                "    ldr x0, =%s\n"
-                "    bl printf\n",  
-                valorNodo->valor, formatoChar);
+            if (valorNodo->tipo == AST_IDENTIFICADOR) {
+                // ✅ ES UNA VARIABLE
+                snprintf(buffer, sizeof(buffer),
+                    "    ldr x1, =%s\n"
+                    "    ldrb w1, [x1]\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",  
+                    valorNodo->valor, formatoChar);
+            } else if (valorNodo->tipo == AST_CARACTER) {
+                // ✅ ES UN LITERAL: 'X' se convierte a código ASCII
+                int ascii = (int)valorNodo->valor[0];
+                snprintf(buffer, sizeof(buffer),
+                    "    mov w1, #%d\n"
+                    "    ldr x0, =%s\n"
+                    "    bl printf\n",  
+                    ascii, formatoChar);
+            }
             strcat(codigo, buffer);
         }
         // PRIORIDAD 4: Entero
@@ -717,24 +1292,26 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                 // Cargar el valor en d0
                 snprintf(buffer, sizeof(buffer),
                     "    ldr x1, =%s\n"
-                    "    ldr %s, [x1]\n",
-                    valorNodo->valor,
-                    (tipo == TIPO_DOUBLE ? "d0" : "s0"));
-                strcat(codigo, buffer);
-
-                // Si es float, convertir a double antes de imprimir
-                if (tipo == TIPO_FLOAT) {
-                    snprintf(buffer, sizeof(buffer),
-                        "    fcvt d0, s0\n");
-                    strcat(codigo, buffer);
-                }
-
-                // Llamar a printf
-                snprintf(buffer, sizeof(buffer),
+                    "    ldr %s, [x1]\n"
+                    "    fmov d1, %s\n"     // ✅ MOVER A d1 PARA printf
                     "    ldr x0, =%s\n"
                     "    bl printf\n",
+                    valorNodo->valor,
+                    (tipo == TIPO_DOUBLE ? "d0" : "s0"),
+                    (tipo == TIPO_DOUBLE ? "d0" : "d0"),  // Si es float, convertir a double
                     formatoFloat);
-                strcat(codigo, buffer);
+                
+                // Si es float, necesitas convertir de s0 a d0 primero
+                if (tipo == TIPO_FLOAT) {
+                    snprintf(buffer, sizeof(buffer),
+                        "    ldr x1, =%s\n"
+                        "    ldr s0, [x1]\n"
+                        "    fcvt d0, s0\n"  // ✅ Convertir float a double
+                        "    fmov d1, d0\n"  // ✅ Mover a d1
+                        "    ldr x0, =%s\n"
+                        "    bl printf\n",
+                        valorNodo->valor, formatoFloat);
+                }
             } else if (valorNodo->tipo == AST_NUMERO) {
                 // Crear constante en .data/.rodata
                 char nombreConst[64];
@@ -760,6 +1337,11 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                         "    fcvt d0, s0\n");
                     strcat(codigo, buffer);
                 }
+                
+                // ✅ MOVER A d1 PARA printf
+                snprintf(buffer, sizeof(buffer),
+                    "    fmov d1, d0\n");
+                strcat(codigo, buffer);
 
                 // Llamar a printf
                 snprintf(buffer, sizeof(buffer),
@@ -768,8 +1350,18 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     formatoFloat);
                 strcat(codigo, buffer);
             }
+            strcat(codigo, buffer);
         } else if (tipo == TIPO_BOOLEAN) {
             insertarConstantesBooleanas(gen);
+            
+            // ✅ AGREGAR DECLARACIÓN DE CONSTANTES str_true Y str_false
+            if (!strstr(gen->buffer, "str_true:")) {
+                insertarEnSeccionData(gen, "str_true: .asciz \"true\"\n");
+            }
+            if (!strstr(gen->buffer, "str_false:")) {
+                insertarEnSeccionData(gen, "str_false: .asciz \"false\"\n");
+            }
+            
             char formatoBool[64];
             snprintf(formatoBool, sizeof(formatoBool), "format_bool_%d", gen->admin_registros->contador_constantes++);
             snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoBool);
@@ -798,6 +1390,35 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
         }else if (tipo == TIPO_VECTOR && valorNodo->tipo == AST_IDENTIFICADOR) {
             TipoDato tipoBase = obtenerTipoBaseVector(astGlobal, valorNodo->valor);
             int tam = getVectorSize(astGlobal, valorNodo->valor);
+
+            NodoAST* vectorDecl = buscarDeclaracionPorIdentificador(astGlobal, AST_DECLARACION_VECTOR, valorNodo->valor);
+    
+            if (vectorDecl) {
+                // Intentar obtener el tamaño desde la dimensión actualizada
+                if (vectorDecl->num_hijos >= 4 && vectorDecl->hijos[3]->tipo == AST_1DIMENSION) {
+                    NodoAST* dimensionNodo = vectorDecl->hijos[3]->hijos[0];
+                    tam = atoi(dimensionNodo->valor);
+                    printf("[DEBUG IMPRESION] Tamaño actualizado desde dimensión: %d\n", tam);
+                } else if (vectorDecl->num_hijos >= 3) {
+                    // Usar la lógica existente para Arrays.add
+                    NodoAST* listaElementos = vectorDecl->hijos[2];
+                    
+                    if (listaElementos->tipo == AST_LISTA_ELEMENTOS && 
+                        listaElementos->num_hijos == 1 && 
+                        listaElementos->hijos[0]->tipo == AST_ADD) {
+                        
+                        NodoAST* addNodo = listaElementos->hijos[0];
+                        
+                        if (addNodo->num_hijos >= 1 && addNodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                            const char* vectorOriginal = addNodo->hijos[0]->valor;
+                            int tamOriginal = getVectorSize(astGlobal, vectorOriginal);
+                            tam = tamOriginal + 1;
+                            printf("[DEBUG IMPRESION] Vector '%s' es resultado de Arrays.add(), tamaño: %d\n", 
+                                valorNodo->valor, tam);
+                        }
+                    }
+                }
+            }
             if (tam <= 0) tam = 1;
             const char* vecname = valorNodo->valor;
 
@@ -1120,45 +1741,7 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
                     vecname);
                 strcat(codigo, buffer);
             }
-        } else if (tipo == TIPO_BOOLEAN) {
-            insertarConstantesBooleanas(gen);
-            char formatoBool[64];
-            snprintf(formatoBool, sizeof(formatoBool), "format_bool_%d", gen->admin_registros->contador_constantes++);
-            snprintf(buffer, sizeof(buffer), "%s: .asciz \"%%s\\n\"\n", formatoBool);
-            insertarEnSeccionData(gen, buffer);
-
-            if (valorNodo->tipo == AST_IDENTIFICADOR) {
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x1, =%s\n"
-                    "    ldrb w1, [x1]\n"
-                    "    cmp w1, #0\n"
-                    "    ldr x2, =str_false\n"
-                    "    ldr x3, =str_true\n"
-                    "    csel x1, x3, x2, ne\n"
-                    "    ldr x0, =%s\n"
-                    "    bl printf\n",
-                    valorNodo->valor, formatoBool);
-            } else if (valorNodo->tipo == AST_BOOLEAN) {
-                const char* strBool = (strcmp(valorNodo->valor, "true") == 0) ? "str_true" : "str_false";
-                snprintf(buffer, sizeof(buffer),
-                    "    ldr x1, =%s\n"
-                    "    ldr x0, =%s\n"
-                    "    bl printf\n",
-                    strBool, formatoBool);
-            } else {
-                ResultadoExprEmbebida resultado = generarExprEmbebidaARM64(gen, valorNodo, &(int){1});
-                strcat(codigo, resultado.codigo);
-                snprintf(buffer, sizeof(buffer),
-                    "    mov w0, %s\n"
-                    "    ldr x1, =temp_str_valueof\n"
-                    "    bl valueOf_bool\n"
-                    "    ldr x1, =temp_str_valueof\n"
-                    "    ldr x0, =%s\n"
-                    "    bl printf\n",
-                    resultado.resultado, formatoBool);
-                strcat(codigo, buffer);
-            }
-        } else {
+        }else {
             // Tipo no soportado
             snprintf(buffer, sizeof(buffer),
                 "    // Tipo no soportado para impresión\n");
@@ -1169,3 +1752,4 @@ void generarImpresionARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     // Agregar el código generado a la sección .text
     insertarEnSeccionText(gen, codigo);
 }
+

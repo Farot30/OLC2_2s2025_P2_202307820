@@ -12,15 +12,27 @@
 #include "InstruccionesSent_arm64/while_arm64.h"
 #include "InstruccionesSent_arm64/Break_continue_arm64.h"
 #include "Vectores_arm64/declaracionesVec_arm64.h"
+#include "Vectores_arm64/DeclaracionesMat_arm64.h"
 #include "Embebidas/String_valueOf.h"
 #include "InstruccionesSent_arm64/ForEach_arm64.h"
 #include "Vectores_arm64/EscrituraVector_arm64.h"
+#include "Vectores_arm64/EscrituraMat_arm64.h"
+#include "Vectores_arm64/AccesoMatriz_arm64.h"
 #include "Embebidas/Parseos_arm64.h"
 #include "Embebidas/Embebidas_arm64.h"
 #include "InstruccionesSent_arm64/Do_While_arm64.h"
+#include "Funciones/FuncionesVoid_arm64.h"
+#include "Funciones/LlamadasVoid_arm64.h"
+#include "Funciones/Funciones_arm64.h"
+#include "Funciones/Llamadas_arm64.h"
+#include "../AST/err.h"
 #include <stdlib.h>
 #include <string.h>
 
+
+
+// Pilas de ámbitos globales
+PilaAmbitosRetorno pilaAmbitosRetorno;
 // Estructura para almacenar código de carga
 typedef struct CodigoCarga {
     char codigo[256];
@@ -34,6 +46,8 @@ typedef struct OperacionPendiente {
     bool esDeclaracion;
     struct OperacionPendiente* siguiente;
 } OperacionPendiente;
+
+extern NodoAST* astGlobal;
 
 static OperacionPendiente* operaciones_pendientes = NULL;
 
@@ -112,6 +126,91 @@ bool verificarDependencia(NodoAST* nodo, const char* variable) {
     return false;
 }
 
+// ✅ NUEVA FUNCIÓN: Insertar código de función ANTES de _start
+void insertarFuncionAntesDeStart(GeneradorDeclaraciones* gen, const char* codigo) {
+    if (!gen->buffer || !codigo) return;
+
+    // Buscar la etiqueta _start:
+    const char* start_marker = "_start:\n";
+    char* pos = strstr(gen->buffer, start_marker);
+    
+    if (pos) {
+        // Insertar JUSTO ANTES de _start:
+        size_t offset = pos - gen->buffer;
+        size_t len_actual = strlen(gen->buffer);
+        size_t len_codigo = strlen(codigo);
+
+        // Redimensionar buffer si es necesario
+        if (len_actual + len_codigo + 1 >= gen->buffer_size) {
+            gen->buffer_size = len_actual + len_codigo + 2048;
+            gen->buffer = realloc(gen->buffer, gen->buffer_size);
+            pos = gen->buffer + offset; // Recalcular posición
+        }
+
+        // Mover el contenido para hacer espacio
+        memmove(pos + len_codigo, pos, len_actual - offset + 1);
+        memcpy(pos, codigo, len_codigo);
+    } else {
+        // Si no existe _start, agregar después de .text
+        const char* text_marker = ".text\n";
+        pos = strstr(gen->buffer, text_marker);
+        if (pos) {
+            pos += strlen(text_marker);
+            size_t offset = pos - gen->buffer;
+            size_t len_actual = strlen(gen->buffer);
+            size_t len_codigo = strlen(codigo);
+
+            if (len_actual + len_codigo + 1 >= gen->buffer_size) {
+                gen->buffer_size = len_actual + len_codigo + 2048;
+                gen->buffer = realloc(gen->buffer, gen->buffer_size);
+            }
+
+            memmove(gen->buffer + offset + len_codigo, gen->buffer + offset, len_actual - offset + 1);
+            memcpy(gen->buffer + offset, codigo, len_codigo);
+        } else {
+            agregarCodigoAlBuffer(gen, codigo);
+        }
+    }
+}
+
+static NodoAST* buscarFuncionRetornoEnAST_Local(NodoAST* raiz, const char* nombreFuncion) {
+    if (!raiz || !nombreFuncion) return NULL;
+    
+    // Si es un nodo de función con retorno (AST_FUNCION)
+    if (raiz->tipo == AST_FUNCION && raiz->num_hijos >= 2) {
+        NodoAST* idNodo = raiz->hijos[1]; // El nombre está en el segundo hijo
+        if (idNodo && idNodo->tipo == AST_IDENTIFICADOR && 
+            strcmp(idNodo->valor, nombreFuncion) == 0) {
+            return raiz;
+        }
+    }
+    
+    // Buscar recursivamente en los hijos
+    for (int i = 0; i < raiz->num_hijos; i++) {
+        NodoAST* resultado = buscarFuncionRetornoEnAST_Local(raiz->hijos[i], nombreFuncion);
+        if (resultado) return resultado;
+    }
+    
+    return NULL;
+}
+
+/**
+ * Obtiene el tipo de retorno de una función desde su nodo AST
+ */
+static TipoDato obtenerTipoRetornoFuncions(NodoAST* nodoFuncion) {
+    if (!nodoFuncion || nodoFuncion->tipo != AST_FUNCION || nodoFuncion->num_hijos < 1) {
+        return TIPO_DESCONOCIDO;
+    }
+    
+    // El tipo de retorno está en el primer hijo
+    NodoAST* tipoRetornoNodo = nodoFuncion->hijos[0];
+    if (!tipoRetornoNodo || tipoRetornoNodo->tipo != AST_TIPO) {
+        return TIPO_DESCONOCIDO;
+    }
+    
+    return obtenerTipoDesdeString(tipoRetornoNodo->valor);
+}
+
 void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     // Abrir archivo
     gen->archivo = fopen(nombreArchivo, "w");
@@ -129,7 +228,7 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
 
     
     // Inicializar buffer
-    gen->buffer_size = 8192; // Aumentar tamaño inicial
+    gen->buffer_size = 65536; // Aumentar tamaño inicial
     gen->buffer_codigo = malloc(gen->buffer_size);
     gen->buffer_codigo[0] = '\0';
     
@@ -184,6 +283,7 @@ void inicializarGeneradorARM64(GeneradorARM64* gen, const char* nombreArchivo) {
     
     // **SOLO AGREGAR AL BUFFER, NO ESCRIBIR AL ARCHIVO AÚN**
     strcat(gen->buffer_codigo, estructura_completa);
+    inicializarPilaAmbitos(&gen->pila_ambitos);
 }
 
 void finalizarGeneradorARM64(GeneradorARM64* gen) {
@@ -274,10 +374,16 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                 else if (valorNodo->tipo == AST_OPERACION){
                     printf("[DEBUG] Agregando operación pendiente para: %s\n", nombreVariable);
                     
-                    // **GENERAR LA DECLARACIÓN CON .skip 8 INMEDIATAMENTE**
+                    // **GENERAR LA DECLARACIÓN CORRECTA SEGÚN EL TIPO**
                     char decl[64];
                     if (tipo == TIPO_STRING) {
                         snprintf(decl, sizeof(decl), "%s: .skip 8\n", nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(decl, sizeof(decl), "%s: .double 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_FLOAT) {
+                        snprintf(decl, sizeof(decl), "%s: .float 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
+                        snprintf(decl, sizeof(decl), "%s: .byte 0\n", nombreVariable);
                     } else {
                         snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable);
                     }
@@ -287,7 +393,7 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                     agregarOperacionPendiente(nombreVariable, valorNodo, tipo, true);
 
                     procesarOperacionesPendientes(gen);
-                } else if (valorNodo->tipo == AST_INDEXOF){
+                }else if (valorNodo->tipo == AST_INDEXOF){
                     printf("[DEBUG DECLARACION ARM64] Arrays.indexOf para '%s'\n", nombreVariable);
                     char codigo[128];
                     // 1. Declaración en .data (int para el resultado)
@@ -298,12 +404,182 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
                     generarArraysIndexOfARM64(&gen->gen_declaraciones, nombreVariable, valorNodo);
                     
                     return;
+                } else if (valorNodo->tipo == AST_ACCESO) {
+                     printf("[DEBUG DECLARACION ARM64] Acceso a variable para '%s'\n", nombreVariable);
+
+                    // **DETECTAR SI ES VECTOR O MATRIZ**
+                    int numDimensiones = contarDimensionesAcceso(valorNodo);
+                    
+                    char codigo[256];
+                    
+                    // 1. Declaración en .data según el tipo
+                    if (tipo == TIPO_STRING) {
+                        snprintf(codigo, sizeof(codigo),
+                            "%s: .quad str_lit_%s\n"
+                            "str_lit_%s: .asciz \"\"\n",
+                            nombreVariable, nombreVariable, nombreVariable);
+                    } else if (tipo == TIPO_FLOAT) {
+                        snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_CHAR) {
+                        snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
+                    } else {
+                        snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
+                    }
+                    insertarEnSeccionData(&gen->gen_declaraciones, codigo);
+                    
+                    // 2. Generar código de acceso Y asignación según dimensiones
+                    if (numDimensiones == 2) {
+                        // **ACCESO A MATRIZ**
+                        printf("[DEBUG DECLARACION] Acceso a matriz en asignación a '%s'\n", nombreVariable);
+                        generarAccesoMatrizParaAsignacion(&gen->gen_declaraciones, valorNodo, nombreVariable);
+                    } else if (numDimensiones == 1) {
+                        // **ACCESO A VECTOR**
+                        printf("[DEBUG DECLARACION] Acceso a vector en asignación a '%s'\n", nombreVariable);
+                        generarAccesoVectorParaAsignacion(&gen->gen_declaraciones, valorNodo, nombreVariable);
+                    } else {
+                        printf("[ERROR] Número de dimensiones no soportado: %d\n", numDimensiones);
+                    }
+                    
+                    return;
+                } else if (valorNodo->tipo == AST_PARSEJOIN){
+                    printf("[DEBUG] haciendo el parseJOIN");
+                    char codigo[256];
+                    if (tipo == TIPO_STRING) {
+                        snprintf(codigo, sizeof(codigo),
+                            "%s: .quad str_lit_%s\n"
+                            "str_lit_%s: .asciz \"\"\n",
+                            nombreVariable, nombreVariable, nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(codigo, sizeof(codigo), "%s: .double 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_FLOAT) {
+                        snprintf(codigo, sizeof(codigo), "%s: .float 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_INT) {
+                        snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
+                    } else if (tipo == TIPO_CHAR || tipo == TIPO_BOOLEAN) {
+                        snprintf(codigo, sizeof(codigo), "%s: .byte 0\n", nombreVariable);
+                    }
+                    insertarEnSeccionData(gen, codigo);
+
+                    generarStringJoinARM64(&gen->gen_declaraciones, nombreVariable, valorNodo);
+                    return;
+                } else if(valorNodo->tipo == AST_LENGHT){
+                    printf("[DEBUG DECLARACION ARM64] Array.length para '%s'\n", nombreVariable);
+                    
+                    // 1. Declaración en .data (int para el resultado)
+                    char codigo[128];
+                    snprintf(codigo, sizeof(codigo), "%s: .word 0\n", nombreVariable);
+                    insertarEnSeccionData(&gen->gen_declaraciones, codigo);
+                    
+                    // 2. Generar código de Array.length
+                    int regIndex = 1;
+                    ResultadoExprEmbebida resultado = generarArrayLengthARM64(&gen->gen_declaraciones, valorNodo, &regIndex);
+                    
+                    if (resultado.codigo[0] != '\0') {
+                        insertarEnSeccionText(&gen->gen_declaraciones, resultado.codigo);
+                        
+                        // 3. Asignar el resultado a la variable
+                        snprintf(codigo, sizeof(codigo),
+                            "    ldr x2, =%s\n"
+                            "    str %s, [x2]\n",
+                            nombreVariable, resultado.resultado); // Usa x2 para la dirección, w1/w2 para el valor
+                        insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+                    }
+                    
+                    return;
+                
+                } else if (valorNodo->tipo == AST_LLAMADA){
+                    printf("[DEBUG] Declaración con llamada a función para '%s'\n", nombreVariable);
+            
+                    // Obtener el nombre de la función desde el nodo de llamada
+                    const char* nombreFuncion = NULL;
+                    if (valorNodo->num_hijos >= 1 && valorNodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                        nombreFuncion = valorNodo->hijos[0]->valor;
+                    }
+                    
+                    if (!nombreFuncion) {
+                        printf("[ERROR] No se pudo obtener el nombre de la función\n");
+                        break;
+                    }
+                    
+                    // ✅ BUSCAR LA FUNCIÓN EN EL AST (no en la tabla de símbolos)
+                    NodoAST* funcionNodo = buscarFuncionRetornoEnAST_Local(astGlobal, nombreFuncion);
+                    
+                    if (!funcionNodo) {
+                        printf("[ERROR] Función '%s' no encontrada en el AST\n", nombreFuncion);
+                        
+                        // Declarar la variable sin inicializar
+                        char decl[64];
+                        if (tipo == TIPO_INT || tipo == TIPO_BOOLEAN || tipo == TIPO_CHAR) {
+                            snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable);
+                        } else if (tipo == TIPO_FLOAT) {
+                            snprintf(decl, sizeof(decl), "%s: .float 0.0\n", nombreVariable);
+                        } else if (tipo == TIPO_DOUBLE) {
+                            snprintf(decl, sizeof(decl), "%s: .double 0.0\n", nombreVariable);
+                        } else if (tipo == TIPO_STRING) {
+                            snprintf(decl, sizeof(decl), "%s: .quad 0\n", nombreVariable);
+                        }
+                        insertarEnSeccionData(&gen->gen_declaraciones, decl);
+                        break;
+                    }
+                    
+                    // ✅ OBTENER EL TIPO DE RETORNO DESDE EL AST
+                    TipoDato tipoRetorno = obtenerTipoRetornoFuncions(funcionNodo);
+                    
+                    printf("[DEBUG] Función '%s' encontrada en AST, tipo de retorno: %s\n", 
+                        nombreFuncion, obtenerNombreTipo(tipoRetorno));
+                    
+                    // ✅ VERIFICAR QUE EL TIPO DE RETORNO COINCIDA CON EL TIPO DECLARADO
+                    if (tipoRetorno != tipo && !esWidening(tipoRetorno, tipo)) {
+                        printf("[ERROR] Tipo de retorno de '%s' (%s) no compatible con tipo declarado (%s)\n",
+                            nombreFuncion, obtenerNombreTipo(tipoRetorno), obtenerNombreTipo(tipo));
+                    }
+                    
+                    // 1. Declarar la variable
+                    char decl[64];
+                    if (tipo == TIPO_INT || tipo == TIPO_BOOLEAN || tipo == TIPO_CHAR) {
+                        snprintf(decl, sizeof(decl), "%s: .word 0\n", nombreVariable);
+                    } else if (tipo == TIPO_FLOAT) {
+                        snprintf(decl, sizeof(decl), "%s: .float 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(decl, sizeof(decl), "%s: .double 0.0\n", nombreVariable);
+                    } else if (tipo == TIPO_STRING) {
+                        snprintf(decl, sizeof(decl), "%s: .quad 0\n", nombreVariable);
+                    }
+                    insertarEnSeccionData(&gen->gen_declaraciones, decl);
+                    
+                    // 2. Generar la llamada a la función
+                    generarLlamadaFuncionRetorno(&gen->gen_declaraciones, valorNodo,
+                                                &pilaAmbitosRetorno, astGlobal);
+                    
+                    // 3. Guardar el resultado en la variable
+                    char codigo[128];
+                    if (tipo == TIPO_INT || tipo == TIPO_BOOLEAN || tipo == TIPO_CHAR) {
+                        snprintf(codigo, sizeof(codigo),
+                            "    ldr x1, =%s\n"
+                            "    str w0, [x1]\n", nombreVariable);
+                    } else if (tipo == TIPO_FLOAT) {
+                        snprintf(codigo, sizeof(codigo),
+                            "    ldr x1, =%s\n"
+                            "    str s0, [x1]\n", nombreVariable);
+                    } else if (tipo == TIPO_DOUBLE) {
+                        snprintf(codigo, sizeof(codigo),
+                            "    ldr x1, =%s\n"
+                            "    str d0, [x1]\n", nombreVariable);
+                    } else if (tipo == TIPO_STRING) {
+                        snprintf(codigo, sizeof(codigo),
+                            "    ldr x1, =%s\n"
+                            "    str x0, [x1]\n", nombreVariable);
+                    }
+                    insertarEnSeccionText(&gen->gen_declaraciones, codigo);
+                    return; // ✅ SALIR AQUÍ
                 }
-                 else {
+                else {
                     generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
                 }
             } else {
-                printf("no hay valor en el nodo");
+                generarDeclaracionVariable(&gen->gen_declaraciones, nodo, &seccion_data_iniciada, &seccion_bss_iniciada);
             }
         }
         break;
@@ -405,13 +681,148 @@ void procesarNodoAST_ARM64(GeneradorARM64* gen, NodoAST* nodo) {
             break;
         case AST_DECLARACION_VECTOR:
             printf("[DEBUG] Nodo de declaración de vector detectado\n");
-            generarDeclaracionVectorARM64(&gen->gen_declaraciones, nodo);
+
+            if (nodo->num_hijos >= 2) {
+                NodoAST* tipoNdo = nodo->hijos[0];
+                NodoAST* idNdo = nodo->hijos[1];
+                NodoAST* valorNodo = nodo->num_hijos > 2 ? nodo->hijos[2] : NULL;
+
+                const char* nombreVariable = idNdo->valor;
+                const char* tipoVariable = tipoNdo->valor;
+
+                TipoDato tipoDestino = obtenerTipoDesdeString(tipoVariable);
+
+                if (valorNodo) {
+                    if (valorNodo->tipo == AST_LISTA_ELEMENTOS) {
+                        NodoAST* lista = valorNodo;
+                        
+                        // Verificar si es Arrays.add
+                        if (lista->num_hijos == 1 && lista->hijos[0]->tipo == AST_ADD) {
+                            NodoAST* addNodo = lista->hijos[0];
+                            printf("[DEBUG] Nodo Arrays.add detectado en declaración de vector '%s'\n", nombreVariable);
+
+                            // Verificar tipo del vector origen
+                            if (addNodo->num_hijos >= 1 && addNodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                                const char* nombreVectorOrigen = addNodo->hijos[0]->valor;
+                                
+                                // Buscar el vector origen en el AST
+                                NodoAST* vectorOrigenDecl = buscarDeclaracionPorIdentificador(astGlobal, AST_DECLARACION_VECTOR, nombreVectorOrigen);
+                                if (!vectorOrigenDecl) {
+                                    printf("[ERROR] Vector origen '%s' no encontrado en el AST\n", nombreVectorOrigen);
+                                    return;
+                                }
+
+                                // Obtener el tipo del vector origen
+                                TipoDato tipoOrigen = obtenerTipoVectorDesdeAST(vectorOrigenDecl);
+
+                                // **VERIFICAR QUE LOS TIPOS COINCIDAN**
+                                if (tipoDestino != tipoOrigen) {
+                                    printf("[ERROR SEMÁNTICO] El vector '%s' es de tipo '%s', pero el vector origen '%s' es de tipo '%s'. Los tipos no coinciden.\n",
+                                        nombreVariable, tipoVariable, nombreVectorOrigen, obtenerNombreTipo(tipoOrigen));
+                                    
+                                    // Opcional: agregar error semántico a la lista de errores
+                                    char msgError[256];
+                                    snprintf(msgError, sizeof(msgError), 
+                                            "El vector '%s' (%s) no puede ser asignado desde '%s' (%s). Tipos incompatibles.",
+                                            nombreVariable, tipoVariable, nombreVectorOrigen, obtenerNombreTipo(tipoOrigen));
+                                    addError(msgError, "global", nodo->linea, nodo->columna);
+                                    return;
+                                }
+
+                                printf("[DEBUG] Verificación de tipos exitosa: '%s' y '%s' son ambos de tipo '%s'\n",
+                                    nombreVariable, nombreVectorOrigen, tipoVariable);
+
+                                // 2. Generar el código para Arrays.add
+                                generarArraysAddOfArm64(&gen->gen_declaraciones, nombreVariable, addNodo);
+                            } else {
+                                printf("[ERROR] El primer argumento de Arrays.add debe ser un identificador de vector\n");
+                                return;
+                            }
+                        } else {
+                            // Generar la declaración normal del vector
+                            generarDeclaracionVectorARM64(&gen->gen_declaraciones, nodo);
+                        }
+                    } else {
+                        // Generar la declaración normal del vector
+                        generarDeclaracionVectorARM64(&gen->gen_declaraciones, nodo);
+                    }
+                }
+            }
             break;
         case AST_ACCESO_ESCRITURA:
             printf("[DEBUG] Nodo de acceso con escritura detectado\n");
-            generarEscrituraVectorARM64(&gen->gen_declaraciones, nodo);
+    
+            // **DETECTAR SI ES VECTOR O MATRIZ**
+            if (nodo->num_hijos >= 1 && nodo->hijos[0]) {
+                NodoAST* accesoNodo = nodo->hijos[0];
+                
+                if (accesoNodo->tipo == AST_ACCESO) {
+                    int numDimensiones = contarDimensionesAcceso(accesoNodo);
+                    
+                    if (numDimensiones == 2) {
+                        // **ESCRITURA EN MATRIZ**
+                        printf("[DEBUG] Escritura en matriz detectada\n");
+                        generarEscrituraMatrizARM64(&gen->gen_declaraciones, nodo);
+                    } else if (numDimensiones == 1) {
+                        // **ESCRITURA EN VECTOR**
+                        printf("[DEBUG] Escritura en vector detectada\n");
+                        generarEscrituraVectorARM64(&gen->gen_declaraciones, nodo);
+                    } else {
+                        printf("[ERROR] Número de dimensiones no soportado: %d\n", numDimensiones);
+                    }
+                } else {
+                    printf("[ERROR] Nodo de acceso inválido en escritura\n");
+                }
+            }
+            break;
+        case AST_DECLARACION_MATRIZ:
+            printf("[DEBUG] Nodo de declaración de matriz detectado\n");
+            generarDeclaracionMatrizARM64(&gen->gen_declaraciones, nodo);
             break;
 
+        case AST_FUNCION_VOID:
+            printf("[DEBUG] Nodo FUNCION_VOID detectado arm64\n");
+            generarDeclaracionFuncionVoid(&gen->gen_declaraciones, nodo, 
+                                       &gen->pila_ambitos, astGlobal);
+            break;
+    
+        case AST_LLAMADA_VOID:
+            printf("[DEBUG] Nodo LLAMADA_VOID detectado arm64\n");
+            generarLlamadaFuncionVoid(&gen->gen_declaraciones, nodo, 
+                                    &gen->pila_ambitos, astGlobal);
+
+            break;
+
+        case AST_LLAMADA:
+            // Puede ser llamada a void o con retorno
+            printf("[DEBUG] Nodo LLAMADA detectado arm64\n");
+            
+            // Verificar si es una función void
+            if (nodo->num_hijos >= 1 && nodo->hijos[0]->tipo == AST_IDENTIFICADOR) {
+                NodoAST* funcionDecl = buscarFuncionVoidEnAST(astGlobal, nodo->hijos[0]->valor);
+                if (funcionDecl) {
+                    // Es función void
+                    generarLlamadaFuncionVoid(&gen->gen_declaraciones, nodo, 
+                                            &gen->pila_ambitos, astGlobal);
+                } else {
+                    generarLlamadaFuncionRetorno(&gen->gen_declaraciones, nodo,
+                                        &pilaAmbitosRetorno, astGlobal);
+                    printf("[WARNING] Llamada a función con retorno no implementada aún\n");
+                }
+            }
+            break;
+
+        case AST_FUNCION:
+            printf("[DEBUG] Procesando función con retorno: %s -> %s\n",
+                   nodo->hijos[1] ? nodo->hijos[1]->valor : "unknown",
+                   nodo->hijos[0] ? nodo->hijos[0]->valor : "unknown");
+            generarDeclaracionFuncionRetorno(&gen->gen_declaraciones, nodo,
+                                            &pilaAmbitosRetorno, astGlobal);
+            break;
+        case AST_RETURN:
+            printf("[DEBUG] Nodo RETURN detectado arm64\n");
+
+            break;
         default:
             // Procesar hijos recursivamente
             for (int i = 0; i < nodo->num_hijos; i++) {

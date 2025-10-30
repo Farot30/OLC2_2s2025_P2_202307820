@@ -199,5 +199,38 @@ void generarEscrituraVectorARM64(GeneradorDeclaraciones* gen, NodoAST* nodo) {
     // Insertar código completo
     insertarEnSeccionText(gen, codigo);
 
+    /*
+    int regBase = regIndex++;
+    
+    // **✅ VERIFICAR SI ES UN PUNTERO**
+    char patronPuntero[128];
+    snprintf(patronPuntero, sizeof(patronPuntero), "%s: .quad", nombreVector);
+    
+    if (strstr(gen->buffer, patronPuntero)) {
+        // Es un puntero
+        snprintf(buffer, sizeof(buffer),
+            "    ldr x%d, =%s           // Dirección del puntero\n"
+            "    ldr x%d, [x%d]          // ✅ Desreferenciar\n",
+            regBase, nombreVector, regBase, regBase);
+    } else {
+        // Vector directo
+        snprintf(buffer, sizeof(buffer),
+            "    ldr x%d, =%s           // Dirección base del vector\n",
+            regBase, nombreVector);
+    }
+    strcat(codigo, buffer);
+
+    // Almacenar con indexación escalada
+    if (shift > 0) {
+        snprintf(buffer, sizeof(buffer),
+            "    %s %s, [x%d, %s, SXTW #%d]  // Almacenar valor\n",
+            instruccionStore, valorResultado.resultado, regBase, regIndiceStr, shift);
+    } else {
+        snprintf(buffer, sizeof(buffer),
+            "    %s %s, [x%d, %s, SXTW]      // Almacenar valor\n",
+            instruccionStore, valorResultado.resultado, regBase, regIndiceStr);
+    }
+    strcat(codigo, buffer);*/
+
     printf("[DEBUG ESCRITURA VECTOR] Código generado para escritura en '%s'\n", nombreVector);
 }

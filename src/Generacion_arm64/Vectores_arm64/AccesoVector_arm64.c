@@ -5,6 +5,7 @@
 #include "../../simbolos/Evaluador.h"
 #include "../../semantico/semantico.h"
 #include "../../AST/ast.h"
+#include "AccesoMatriz_arm64.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>  
@@ -179,20 +180,44 @@ ResultadoExprEmbebida generarAccesoVectorARM64(GeneradorDeclaraciones* gen, Nodo
     // Registro para resultado
     int regResultado = (*regIndex)++;
     
-    if (shift > 0 && tamElemento != 1) {
-        // Usar indexación escalada (más eficiente)
-        snprintf(buffer, sizeof(buffer),
-            "    ldr x%d, =%s\n"           // Cargar dirección base
-            "    %s %s%d, [x%d, %s, SXTW #%d]\n",  // Acceso escalado
-            regResultado, nombreVector,
-            instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr, shift);
+    // **✅ VERIFICAR SI ES UN PUNTERO Y DESREFERENCIAR**
+    char patronPuntero[128];
+    snprintf(patronPuntero, sizeof(patronPuntero), "%s: .quad", nombreVector);
+    
+    if (strstr(gen->buffer, patronPuntero)) {
+        // Es un puntero, necesita doble indirección
+        if (shift > 0 && tamElemento != 1) {
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x%d, =%s\n"           // Cargar dirección del puntero
+                "    ldr x%d, [x%d]             // ✅ Desreferenciar puntero\n"
+                "    %s %s%d, [x%d, %s, SXTW #%d]\n",  // Acceso escalado
+                regResultado, nombreVector,
+                regResultado, regResultado,
+                instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr, shift);
+        } else {
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x%d, =%s\n"           // Cargar dirección del puntero
+                "    ldr x%d, [x%d]             // ✅ Desreferenciar puntero\n"
+                "    %s %s%d, [x%d, %s, SXTW]\n",  // Acceso sin escala
+                regResultado, nombreVector,
+                regResultado, regResultado,
+                instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr);
+        }
     } else {
-        // Para bytes (tamElemento == 1), no hay escala
-        snprintf(buffer, sizeof(buffer),
-            "    ldr x%d, =%s\n"           // Cargar dirección base
-            "    %s %s%d, [x%d, %s, SXTW]\n",  // Acceso sin escala
-            regResultado, nombreVector,
-            instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr);
+        // Vector directo (caso original)
+        if (shift > 0 && tamElemento != 1) {
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x%d, =%s\n"
+                "    %s %s%d, [x%d, %s, SXTW #%d]\n",
+                regResultado, nombreVector,
+                instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr, shift);
+        } else {
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x%d, =%s\n"
+                "    %s %s%d, [x%d, %s, SXTW]\n",
+                regResultado, nombreVector,
+                instruccionCarga, sufijoCarga, regResultado, regResultado, regIndiceStr);
+        }
     }
     strcat(resultado.codigo, buffer);
     

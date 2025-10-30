@@ -1458,7 +1458,6 @@ instruccion_if:
         agregarHijo($$, $5);   // bloque if
     }
     | TOKEN_IF TOKEN_PARIZQ expresion TOKEN_PARDER bloque TOKEN_ELSE bloque {
-        printf("[DEBUG] Procesando if-else en línea %d, columna %d\n", @1.first_line, @1.first_column);
         $$ = crearNodo(AST_IF, "if");
         $$->linea = @1.first_line; $$->columna = @1.first_column;
         agregarHijo($$, $3);   // condición
@@ -1477,7 +1476,6 @@ instruccion_if:
         agregarHijo($$, elseif_node);
     }
     | TOKEN_IF TOKEN_PARIZQ error TOKEN_PARDER bloque %prec TOKEN_IF {
-        printf("[DEBUG] Error en condición del if en línea %d, columna %d\n", @3.first_line, @3.first_column);
         addErrorSintactico("Expresión inválida en condición if", "global", @3.first_line, @3.first_column);
         $$ = crearNodo(AST_IF, "if");
         $$->linea = @1.first_line; $$->columna = @1.first_column;

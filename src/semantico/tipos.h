@@ -22,6 +22,7 @@ typedef enum {
 TipoDato obtenerTipoDesdeString(const char* tipostr);
 TipoDato deducirTipoExpr(NodoAST* expr); 
 
+const char* obtenerNombreTipo(TipoDato tipo);
 const char* valorPorDefectoTipo(TipoDato t);
 int esWidening(TipoDato origen, TipoDato destino);
 int esNarrowing(TipoDato origen, TipoDato destino);

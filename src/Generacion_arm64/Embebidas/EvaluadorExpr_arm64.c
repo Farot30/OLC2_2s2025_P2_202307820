@@ -4,12 +4,16 @@
 #include "../InstruccionesNorm_arm64/StringBuilder.h"
 #include "../Impresion_arm64.h"
 #include "../Vectores_arm64/AccesoVector_arm64.h"
+#include "../Vectores_arm64/AccesoMatriz_arm64.h"
 #include "Embebidas_arm64.h"
+#include "../generador_arm64.h"
+#include "../Funciones/Funciones_arm64.h"
 #include <stdio.h>
 #include <string.h>
-
+static int contador_buffers = 0;
 extern NodoAST* astGlobal;
-
+extern GeneradorARM64 generador_principal;
+extern PilaAmbitosRetorno pilaAmbitosRetorno;
 // Detecta si hay string en la operación (para distinguir concat de suma)
 static bool contieneStringEnOperacion(NodoAST* nodo) {
     if (!nodo) return false;
@@ -34,13 +38,6 @@ bool esConcatenacionSimple(NodoAST* expr) {
 
     return (izqEsCadena && derEsCadena);
 }
-
-static void insertarSeccionValue(GeneradorDeclaraciones* gen) {
-    if (!esVariableAscizImpresion(gen, "temp_str_valueof")) {
-        insertarEnSeccionBss(gen, "temp_str_valueof: .skip 32\n");
-    }
-}
-
 
 ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, NodoAST* expr, int* regIndex) {
     ResultadoExprEmbebida res = {0};
@@ -320,42 +317,73 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
         return res;
     }
 
-    // 2. Embebidas: String.valueOf, parseInt, etc.
-    if (expr->tipo == AST_VALUEOF && expr->num_hijos == 1) {
-        insertarSeccionValue(gen);
-        ResultadoExprEmbebida hijo = generarExprEmbebidaARM64(gen, expr->hijos[0], regIndex);
-        // Primero, copia el código generado por el hijo
-        strcat(res.codigo, hijo.codigo);
-        // Luego, agrega las instrucciones ARM64 para valueOf_int
-        char buffer[256];
-        if(hijo.tipo == TIPO_INT) {
+   if (expr->tipo == AST_VALUEOF && expr->num_hijos == 1) {
+        NodoAST* exprInterna = expr->hijos[0];
+        TipoDato tipoExpr = deducirTipoExprARM64(exprInterna, astGlobal);
+
+        ResultadoExprEmbebida resExpr = generarExprEmbebidaARM64(gen, exprInterna, regIndex);
+        strcat(res.codigo, resExpr.codigo);
+
+        // ✅ **CREAR BUFFER ÚNICO CON NOMBRE ÚNICO**
+        char nombreBuffer[64];
+        snprintf(nombreBuffer, sizeof(nombreBuffer), "temp_valueof_%d", contador_buffers++);
+        
+        // Declarar buffer en .bss
+        char declBuffer[128];
+        snprintf(declBuffer, sizeof(declBuffer), "%s: .skip 32\n", nombreBuffer);
+        insertarEnSeccionBss(gen, declBuffer);
+
+        char buffer[512];
+        
+        if (tipoExpr == TIPO_INT) {
             snprintf(buffer, sizeof(buffer),
                 "    mov w0, %s\n"
-                "    ldr x1, =temp_str_valueof\n"
-                "    bl valueOf_int\n",
-                hijo.resultado);
-            strcat(res.codigo, buffer);
-        }
-        else if(hijo.tipo == TIPO_BOOLEAN) {
+                "    ldr x1, =%s\n"
+                "    bl valueOf_int\n"
+                "    ldr x0, =%s\n",
+                resExpr.resultado, nombreBuffer, nombreBuffer);
+            res.tipo = TIPO_STRING;
+            snprintf(res.resultado, sizeof(res.resultado), "x0");
+        } else if (tipoExpr == TIPO_DOUBLE) {
+            snprintf(buffer, sizeof(buffer),
+                "    ldr x1, =%s\n"
+                "    bl valueOf_double\n"
+                "    ldr x0, =%s\n",
+                nombreBuffer, nombreBuffer);
+            res.tipo = TIPO_STRING;
+            snprintf(res.resultado, sizeof(res.resultado), "x0");
+        } else if (tipoExpr == TIPO_FLOAT) {
+            snprintf(buffer, sizeof(buffer),
+                "    fcvt d0, s0\n"
+                "    ldr x1, =%s\n"
+                "    bl valueOf_float\n"
+                "    ldr x0, =%s\n",
+                nombreBuffer, nombreBuffer);
+            res.tipo = TIPO_STRING;
+            snprintf(res.resultado, sizeof(res.resultado), "x0");
+        } else if (tipoExpr == TIPO_BOOLEAN) {
             snprintf(buffer, sizeof(buffer),
                 "    mov w0, %s\n"
-                "    ldr x1, =temp_str_valueof\n"
-                "    bl valueOf_bool\n",
-                hijo.resultado);
-        } else if(hijo.tipo == TIPO_FLOAT) {
+                "    ldr x1, =%s\n"
+                "    bl valueOf_bool\n"
+                "    ldr x0, =%s\n",
+                resExpr.resultado, nombreBuffer, nombreBuffer);
+            res.tipo = TIPO_STRING;
+            snprintf(res.resultado, sizeof(res.resultado), "x0");
+        } else if (tipoExpr == TIPO_CHAR) {
+            // ✅ CORRECCIÓN PARA CHAR
             snprintf(buffer, sizeof(buffer),
-                "    ldr x1, =temp_str_valueof\n"
-                "    bl valueOf_float\n",
-                hijo.resultado);
-        } else if(hijo.tipo == TIPO_DOUBLE) {
-            snprintf(buffer, sizeof(buffer),
-                "    ldr x1, =temp_str_valueof\n"
-                "    bl valueOf_double\n",
-                hijo.resultado);
+                "    ldr x2, =%s\n"
+                "    strb %s, [x2]\n"
+                "    mov w3, #0\n"
+                "    strb w3, [x2, #1]\n"
+                "    mov x0, x2\n",
+                nombreBuffer, resExpr.resultado);
+            res.tipo = TIPO_STRING;
+            snprintf(res.resultado, sizeof(res.resultado), "x0");
         }
+
         strcat(res.codigo, buffer);
-        strcpy(res.resultado, "x0"); // x0 tendrá la dirección del string
-        res.tipo = TIPO_STRING;
         return res;
     }
 
@@ -439,8 +467,29 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
     }
 
     if (expr->tipo == AST_ACCESO) {
-        printf("[DEBUG] Evaluando acceso a vector en expresión\n");
-        return generarAccesoVectorARM64(gen, expr, regIndex);
+        printf("[DEBUG] Evaluando acceso a vector/matriz en expresión\n");
+        
+        // **Detectar si es vector (1D) o matriz (2D)**
+        int numDimensiones = contarDimensionesAcceso(expr);
+        
+        if (numDimensiones == 2) {
+            // **ACCESO A MATRIZ**
+            printf("[DEBUG] Acceso a matriz en expresión\n");
+            return generarAccesoMatrizARM64(gen, expr, regIndex);
+        } else if (numDimensiones == 1) {
+            // **ACCESO A VECTOR**
+            printf("[DEBUG] Acceso a vector en expresión\n");
+            return generarAccesoVectorARM64(gen, expr, regIndex);
+        } else {
+            printf("[ERROR] Número de dimensiones no soportado: %d\n", numDimensiones);
+            ResultadoExprEmbebida res = {0};
+            return res;
+        }
+    }
+
+    if (expr->tipo == AST_LENGHT) {
+        printf("[DEBUG] Evaluando Array.length\n");
+        return generarArrayLengthARM64(gen, expr, regIndex);
     }
 
     if (expr->tipo == AST_CARACTER) {
@@ -463,37 +512,165 @@ ResultadoExprEmbebida generarExprEmbebidaARM64(GeneradorDeclaraciones* gen, Nodo
         return res;
     }
     if (expr->tipo == AST_IDENTIFICADOR) {
-        char buffer[128];
+        char buffer[256];
         TipoDato tipo = deducirTipoExprARM64(expr, astGlobal);
+
+        printf("[DEBUG EVALUADOR ID] Evaluando identificador '%s', tipo=%d\n", 
+            expr->valor, tipo);
+
+        if (gen->dentro_de_funcion && gen->nombre_funcion_actual[0] != '\0') {
+            AmbitoFuncionRetorno* ambito = getAmbitoRetornoActual(&pilaAmbitosRetorno);
+            
+            if (ambito) {
+                // ✅ BUSCAR EN PARÁMETROS
+                for (int i = 0; i < ambito->ambito_base.numParametros; i++) {
+                    if (strcmp(ambito->ambito_base.parametros[i].nombre, expr->valor) == 0) {
+                        int offset = i * 8;
+                        printf("[DEBUG EVALUADOR] Parámetro '%s' encontrado en stack, offset=%d\n", 
+                            expr->valor, offset);
+                        
+                        // ✅ USAR EL TIPO DEL PARÁMETRO DESDE EL ÁMBITO
+                        TipoDato tipoParam = ambito->ambito_base.parametros[i].tipo;
+                        printf("[DEBUG EVALUADOR] Tipo del parámetro: %d (%s)\n", 
+                            tipoParam, obtenerNombreTipo(tipoParam));
+                        
+                        // ✅ CARGAR EL VALOR DEL PARÁMETRO SEGÚN SU TIPO REAL
+                        int regTmp = *regIndex;
+                        (*regIndex)++;
+
+                        // ✅ USAR tipoParam EN LUGAR DE expr->tipo
+                        if (tipoParam == TIPO_INT || tipoParam == TIPO_BOOLEAN || tipoParam == TIPO_CHAR) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr w%d, [sp, #%d]  // cargar param '%s'\n", 
+                                regTmp, offset, expr->valor);
+                            strcat(res.codigo, buffer);
+                            snprintf(res.resultado, sizeof(res.resultado), "w%d", regTmp);
+                        } else if (tipoParam == TIPO_FLOAT) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr s%d, [sp, #%d]  // cargar param '%s'\n", 
+                                regTmp, offset, expr->valor);
+                            strcat(res.codigo, buffer);
+                            snprintf(res.resultado, sizeof(res.resultado), "s%d", regTmp);
+                        } else if (tipoParam == TIPO_DOUBLE) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr d%d, [sp, #%d]  // cargar param '%s'\n", 
+                                regTmp, offset, expr->valor);
+                            strcat(res.codigo, buffer);
+                            snprintf(res.resultado, sizeof(res.resultado), "d%d", regTmp);
+                        } else if (tipoParam == TIPO_STRING) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr x%d, [sp, #%d]  // cargar param '%s'\n", 
+                                regTmp, offset, expr->valor);
+                            strcat(res.codigo, buffer);
+                            snprintf(res.resultado, sizeof(res.resultado), "x%d", regTmp);
+                        }
+                        
+                        res.tipo = tipoParam; // ✅ USAR EL TIPO REAL
+                        printf("[DEBUG EVALUADOR] Código generado para parámetro:\n%s\n", res.codigo);
+                        return res;
+                    }
+                }
+                
+                // ✅ BUSCAR EN VARIABLES LOCALES
+                for (int i = 0; i < ambito->ambito_base.numVariables; i++) {
+                    if (strcmp(ambito->ambito_base.variables[i].nombre, expr->valor) == 0) {
+                        // Variable local con nombre único
+                        char nombreReal[128];
+                        snprintf(nombreReal, sizeof(nombreReal), "%s_%s", 
+                                gen->nombre_funcion_actual, expr->valor);
+                        printf("[DEBUG EVALUADOR] Variable local detectada: %s -> %s\n", 
+                            expr->valor, nombreReal);
+                        
+                        int regTmp = *regIndex;
+                        (*regIndex)++;
+                        
+                        if (tipo == TIPO_INT || tipo == TIPO_BOOLEAN || tipo == TIPO_CHAR) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr x%d, =%s\n"
+                                "    ldr w%d, [x%d]\n", 
+                                regTmp, nombreReal, regTmp, regTmp);
+                        } else if (tipo == TIPO_FLOAT) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr x%d, =%s\n"
+                                "    ldr s%d, [x%d]\n", 
+                                regTmp, nombreReal, regTmp, regTmp);
+                        } else if (tipo == TIPO_DOUBLE) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr x%d, =%s\n"
+                                "    ldr d%d, [x%d]\n", 
+                                regTmp, nombreReal, regTmp, regTmp);
+                        } else if (tipo == TIPO_STRING) {
+                            snprintf(buffer, sizeof(buffer),
+                                "    ldr x%d, =%s\n"
+                                "    ldr x%d, [x%d]\n", 
+                                regTmp, nombreReal, regTmp, regTmp);
+                        }
+                        
+                        strcat(res.codigo, buffer);
+                        
+                        if (tipo == TIPO_INT || tipo == TIPO_BOOLEAN || tipo == TIPO_CHAR) {
+                            snprintf(res.resultado, sizeof(res.resultado), "w%d", regTmp);
+                        } else if (tipo == TIPO_FLOAT) {
+                            snprintf(res.resultado, sizeof(res.resultado), "s%d", regTmp);
+                        } else if (tipo == TIPO_DOUBLE) {
+                            snprintf(res.resultado, sizeof(res.resultado), "d%d", regTmp);
+                        } else if (tipo == TIPO_STRING) {
+                            snprintf(res.resultado, sizeof(res.resultado), "x%d", regTmp);
+                        }
+                        
+                        res.tipo = tipo;
+                        return res;
+                    }
+                }
+            }
+        }
+        
+        // ✅ VARIABLES GLOBALES (fuera de función)
+        const char* nombreReal = expr->valor;
+        int regTmp = *regIndex;
+        (*regIndex)++;
+        
+        printf("[DEBUG EVALUADOR] Variable global: %s\n", nombreReal);
+        
         if (tipo == TIPO_INT) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldr w%d, [x%d]\n", *regIndex, expr->valor, *regIndex, *regIndex);
+                "    ldr w%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", regTmp);
         } else if (tipo == TIPO_CHAR) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldrb w%d, [x%d]\n", *regIndex, expr->valor, *regIndex, *regIndex);
+                "    ldrb w%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", regTmp);
         } else if (tipo == TIPO_BOOLEAN) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldrb w%d, [x%d]\n", *regIndex, expr->valor, *regIndex, *regIndex);
+                "    ldrb w%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "w%d", regTmp);
         } else if (tipo == TIPO_STRING) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldr x%d, [x%d]\n", *regIndex, expr->valor, *regIndex, *regIndex);
+                "    ldr x%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "x%d", regTmp);
         } else if (tipo == TIPO_FLOAT) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldr s%d, [x%d]\n", *regIndex, expr->valor, *regIndex - 1, *regIndex);
+                "    ldr s%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "s%d", regTmp);
         } else if (tipo == TIPO_DOUBLE) {
             snprintf(buffer, sizeof(buffer),
                 "    ldr x%d, =%s\n"
-                "    ldr d%d, [x%d]\n", *regIndex, expr->valor, *regIndex - 1, *regIndex);
+                "    ldr d%d, [x%d]\n", regTmp, nombreReal, regTmp, regTmp);
+            strcat(res.codigo, buffer);
+            snprintf(res.resultado, sizeof(res.resultado), "d%d", regTmp);
         }
-        strcat(res.codigo, buffer);
-        snprintf(res.resultado, sizeof(res.resultado), "%s%d", (tipo == TIPO_STRING ? "x" : "w"), *regIndex);
+        
         res.tipo = tipo;
-        (*regIndex)++;
         return res;
     }
     if (expr->tipo == AST_CADENA) {

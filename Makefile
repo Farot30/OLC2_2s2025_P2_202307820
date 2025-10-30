@@ -63,6 +63,7 @@ BACKEND_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/declaracionesVec_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/DeclaracionesMat_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Impresion_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/If_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Switch_arm64.c \
@@ -75,9 +76,17 @@ BACKEND_SRC = \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Embebidas_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraVector_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoMatriz_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraMat_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/ForEach_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Do_While_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Parseos_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/FuncionesVoid_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/LlamadasVoid_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/Funciones_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/Llamadas_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/FuncionesPredefinidas_arm64.c \
+
 	
 
 # Fuentes GUI
@@ -133,6 +142,7 @@ GUI_SRC = \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/StringBuilder.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesNorm_arm64/Evaluadores_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/declaracionesVec_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/DeclaracionesMat_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Impresion_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/If_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Switch_arm64.c \
@@ -145,9 +155,16 @@ GUI_SRC = \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Embebidas_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoVector_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraVector_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/AccesoMatriz_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Vectores_arm64/EscrituraMat_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/ForEach_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/InstruccionesSent_arm64/Do_While_arm64.c \
 	$(SRC_DIR)/Generacion_arm64/Embebidas/Parseos_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/FuncionesVoid_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/LlamadasVoid_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/Funciones_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/Llamadas_arm64.c \
+	$(SRC_DIR)/Generacion_arm64/Funciones/FuncionesPredefinidas_arm64.c \
 
 
 all: parser gui
